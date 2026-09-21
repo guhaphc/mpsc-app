@@ -20,7 +20,7 @@ export default function Register(){
     if(form.password!==form.confirm){setError("Passwords do not match.");return;}
     setBusy(true);
     const supabase=createClient();
-    const internalEmail=form.email||`${form.username.toLowerCase()}@mpsc.local`;
+    const internalEmail=form.email.trim();
     const {error:signUpError}=await supabase.auth.signUp({email:internalEmail,password:form.password,options:{data:{full_name:form.full_name,mobile:form.mobile,username:form.username,role:form.role}}});
     if(signUpError){setError(signUpError.message);setBusy(false);return;}
     setDone(true);
@@ -28,14 +28,14 @@ export default function Register(){
   }
 
   const fields:[keyof FormState,string,string][]=[
-    ["full_name","Full Name","text"],["mobile","Mobile","tel"],["username","Username","text"],["email","Email (optional)","email"]
+    ["full_name","Full Name","text"],["mobile","Mobile","tel"],["username","Username","text"],["email","Email","email"]
   ];
 
   return <div className="authWrap"><div className="card"><div className="hero"><h1>Create Account</h1><div className="muted">Your registration will be reviewed by Admin.</div></div>
     {done?<div className="form"><div className="success">Registration submitted successfully. Please wait for Admin approval.</div><button className="btn primary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></div>:
     <form className="form" onSubmit={submit}>
       <div><label className="label">Account Type</label><select className="select" value={form.role} onChange={e=>setField("role",e.target.value as FormState["role"])}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>
-      {fields.map(([key,label,type])=><div key={key}><label className="label">{label}</label><input className="input" type={type} value={form[key] as string} onChange={e=>setField(key,e.target.value)} required={key!=="email"}/></div>)}
+      {fields.map(([key,label,type])=><div key={key}><label className="label">{label}</label><input className="input" type={type} value={form[key] as string} onChange={e=>setField(key,e.target.value)} required/></div>)}
       <div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>setField("password",e.target.value)} required/></div>
       <div><label className="label">Confirm Password</label><input className="input" type="password" value={form.confirm} onChange={e=>setField("confirm",e.target.value)} required/></div>
       {error&&<div className="error">{error}</div>}
