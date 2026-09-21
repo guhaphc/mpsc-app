@@ -7,3 +7,6 @@ Next.js + Supabase SSR + role-based registration/authentication foundation.
 
 
 Deployment synchronization marker.
+
+
+Production sync verified.
