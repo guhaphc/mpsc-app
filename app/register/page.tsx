@@ -20,7 +20,7 @@ export default function Register(){
     if(form.password!==form.confirm){setError("Passwords do not match.");return;}
     setBusy(true);
     const supabase=createClient();
-    const internalEmail=form.email.trim();
+    const internalEmail=form.email.trim()||`${form.username.toLowerCase()}@mpsc-all-in-one.com`;
     const {error:signUpError}=await supabase.auth.signUp({email:internalEmail,password:form.password,options:{data:{full_name:form.full_name,mobile:form.mobile,username:form.username,role:form.role}}});
     if(signUpError){setError(signUpError.message);setBusy(false);return;}
     setDone(true);
@@ -28,7 +28,7 @@ export default function Register(){
   }
 
   const fields:[keyof FormState,string,string][]=[
-    ["full_name","Full Name","text"],["mobile","Mobile","tel"],["username","Username","text"],["email","Email","email"]
+    ["full_name","Full Name","text"],["mobile","Mobile","tel"],["username","Username","text"],["email","Email (optional)","email"]
   ];
 
   return <div className="authWrap"><div className="card"><div className="hero"><h1>Create Account</h1><div className="muted">Your registration will be reviewed by Admin.</div></div>
