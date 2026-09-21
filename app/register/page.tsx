@@ -1,3 +1,46 @@
 "use client";
-import {useState} from "react";import {useRouter} from "next/navigation";import {createClient} from "@/lib/supabase/client";
-export default function Register(){const [form,setForm]=useState({full_name:"",mobile:"",username:"",email:"",password:"",confirm:"",role:"student"}),[error,setError]=useState(""),[done,setDone]=useState(false),[busy,setBusy]=useState(false);const router=useRouter();const set=(k:string,v:string)=>setForm(f=>({...f,[k]:v}));async function submit(e:React.FormEvent){e.preventDefault();setError("");if(form.password!==form.confirm){setError("Passwords do not match.");return}setBusy(true);const supabase=createClient();const internalEmail=form.email||`${form.username.toLowerCase()}@mpsc.local`;const {error}=await supabase.auth.signUp({email:internalEmail,password:form.password,options:{data:{full_name:form.full_name,mobile:form.mobile,username:form.username,role:form.role}}});if(error){setError(error.message);setBusy(false);return}setDone(true);setBusy(false)}return <div className="authWrap"><div className="card"><div className="hero"><h1>Create Account</h1><div className="muted">Your registration will be reviewed by Admin.</div></div>{done?<div className="form"><div className="success">Registration submitted successfully. Please wait for Admin approval.</div><button className="btn primary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></div>:<form className="form" onSubmit={submit}><div><label className="label">Account Type</label><select className="select" value={form.role} onChange={e=>set("role",e.target.value)}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>{[["full_name","Full Name"],["mobile","Mobile"],["username","Username"],["email","Email (optional)"]].map(([k,l])=><div key={k}><label className="label">{l}</label><input className="input" type={k==="email"?"email":"text"} value={(form as any)[k]} onChange={e=>set(k,e.target.value)} required={k!=="email"}/></div>)}<div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>set("password",e.target.value)} required/></div><div><label className="label">Confirm Password</label><input className="input" type="password" value={form.confirm} onChange={e=>set("confirm",e.target.value)} required/></div>{error&&<div className="error">{error}</div>}<button className="btn primary" disabled={busy}>{busy?"Submitting…":"CREATE ACCOUNT"}</button><button type="button" className="btn secondary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></form>}</div></div>}
+import {useState,type FormEvent} from "react";
+import {useRouter} from "next/navigation";
+import {createClient} from "@/lib/supabase/client";
+
+type FormState={full_name:string;mobile:string;username:string;email:string;password:string;confirm:string;role:"student"|"teacher"};
+
+export default function Register(){
+  const [form,setForm]=useState<FormState>({full_name:"",mobile:"",username:"",email:"",password:"",confirm:"",role:"student"});
+  const [error,setError]=useState("");
+  const [done,setDone]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const router=useRouter();
+
+  function setField<K extends keyof FormState>(key:K,value:FormState[K]){setForm(f=>({...f,[key]:value}));}
+
+  async function submit(e:FormEvent){
+    e.preventDefault();
+    setError("");
+    if(form.password!==form.confirm){setError("Passwords do not match.");return;}
+    setBusy(true);
+    const supabase=createClient();
+    const internalEmail=form.email||`${form.username.toLowerCase()}@mpsc.local`;
+    const {error:signUpError}=await supabase.auth.signUp({email:internalEmail,password:form.password,options:{data:{full_name:form.full_name,mobile:form.mobile,username:form.username,role:form.role}}});
+    if(signUpError){setError(signUpError.message);setBusy(false);return;}
+    setDone(true);
+    setBusy(false);
+  }
+
+  const fields:[keyof FormState,string,string][]=[
+    ["full_name","Full Name","text"],["mobile","Mobile","tel"],["username","Username","text"],["email","Email (optional)","email"]
+  ];
+
+  return <div className="authWrap"><div className="card"><div className="hero"><h1>Create Account</h1><div className="muted">Your registration will be reviewed by Admin.</div></div>
+    {done?<div className="form"><div className="success">Registration submitted successfully. Please wait for Admin approval.</div><button className="btn primary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></div>:
+    <form className="form" onSubmit={submit}>
+      <div><label className="label">Account Type</label><select className="select" value={form.role} onChange={e=>setField("role",e.target.value as FormState["role"])}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>
+      {fields.map(([key,label,type])=><div key={key}><label className="label">{label}</label><input className="input" type={type} value={form[key] as string} onChange={e=>setField(key,e.target.value)} required={key!=="email"}/></div>)}
+      <div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>setField("password",e.target.value)} required/></div>
+      <div><label className="label">Confirm Password</label><input className="input" type="password" value={form.confirm} onChange={e=>setField("confirm",e.target.value)} required/></div>
+      {error&&<div className="error">{error}</div>}
+      <button className="btn primary" disabled={busy}>{busy?"Submitting…":"CREATE ACCOUNT"}</button>
+      <button type="button" className="btn secondary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button>
+    </form>}
+  </div></div>;
+}
