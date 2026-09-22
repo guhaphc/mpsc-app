@@ -22,17 +22,17 @@ export default function Register(){
    setDone(true);setBusy(false);
  }
  const fields:[keyof FormState,string,string][]=[["full_name","Full Name","text"],["mobile","Mobile Number","tel"],["username","Username","text"]];
- return <div className="authWrap"><div className="authCard">
-   <div className="hero"><img src="/mpsc-logo.svg" className="brandLogo authLogo" alt="MPSC ALL-IN-ONE"/><h1>Create your account</h1><div className="muted">Simple registration. No email required.</div></div>
+ return <main className="authWrap"><div className="authCard">
+   <div className="hero"><img src="/mpsc-logo.jpg" className="authLogo" alt="MPSC ALL-IN-ONE"/><h1>Create Your Account</h1><div className="muted">Join the MPSC preparation platform</div></div>
    {done?<div className="form"><div className="success">Registration submitted successfully. Please wait for Admin approval.</div><button className="btn primary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></div>:
    <form className="form" onSubmit={submit}>
-     <div><label className="label">Account Type</label><select className="select" value={form.role} onChange={e=>setField("role",e.target.value as FormState["role"])}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>
-     {fields.map(([key,label,type])=><div key={key}><label className="label">{label}</label><input className="input" type={type} placeholder={label} value={form[key] as string} onChange={e=>setField(key,e.target.value)} required/></div>)}
-     <div><label className="label">Password</label><input className="input" type="password" placeholder="Create a password" value={form.password} onChange={e=>setField("password",e.target.value)} required/></div>
-     <div><label className="label">Confirm Password</label><input className="input" type="password" placeholder="Re-enter password" value={form.confirm} onChange={e=>setField("confirm",e.target.value)} required/></div>
-     {error&&<div className="error">{error}</div>}
+     <div><label className="label" htmlFor="role">Account Type</label><select id="role" className="select" value={form.role} onChange={e=>setField("role",e.target.value as FormState["role"])}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>
+     {fields.map(([key,label,type])=><div key={key}><label className="label" htmlFor={String(key)}>{label}</label><input id={String(key)} className="input" type={type} placeholder={label} value={form[key] as string} onChange={e=>setField(key,e.target.value)} required/></div>)}
+     <div><label className="label" htmlFor="password">Password</label><input id="password" className="input" type="password" placeholder="Create a password" value={form.password} onChange={e=>setField("password",e.target.value)} autoComplete="new-password" required/></div>
+     <div><label className="label" htmlFor="confirm">Confirm Password</label><input id="confirm" className="input" type="password" placeholder="Re-enter your password" value={form.confirm} onChange={e=>setField("confirm",e.target.value)} autoComplete="new-password" required/></div>
+     {error&&<div className="error" role="alert">{error}</div>}
      <button className="btn primary" disabled={busy}>{busy?"Submitting…":"CREATE ACCOUNT  →"}</button>
      <button type="button" className="btn outline" onClick={()=>router.push("/login")}>BACK TO LOGIN</button>
    </form>}
- </div></div>;
+ </div></main>;
 }
