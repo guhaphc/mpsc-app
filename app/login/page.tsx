@@ -17,7 +17,7 @@ export default function Login(){
   }
   return <main className="authWrap"><div className="authCard">
     <div className="hero">
-      <img src="/mpsc-logo.jpg" className="authLogo" alt="MPSC ALL-IN-ONE" />
+      <img src="/mpsc-logo.svg" className="authLogo" alt="MPSC ALL-IN-ONE" />
       <h1>Welcome Back</h1>
       <div className="muted">Login to continue your MPSC preparation</div>
     </div>
