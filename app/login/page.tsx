@@ -15,19 +15,22 @@ export default function Login(){
     if(signInError){setError("Invalid login details or account is not active.");setBusy(false);return;}
     router.push("/dashboard");router.refresh();
   }
-  return <div className="authWrap"><div className="authCard">
+  return <main className="authWrap"><div className="authCard">
     <div className="hero">
-      <img src="/mpsc-logo.svg" className="brandLogo authLogo" alt="MPSC ALL-IN-ONE"/>
-      <h1>Welcome back</h1><div className="muted">Username + password. Simple and secure.</div>
+      <img src="/mpsc-logo.jpg" className="authLogo" alt="MPSC ALL-IN-ONE" />
+      <h1>Welcome Back</h1>
+      <div className="muted">Login to continue your MPSC preparation</div>
     </div>
     <form className="form" onSubmit={submit}>
-      <div><label className="label">Username</label><input className="input" placeholder="Enter username" value={username} onChange={e=>setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" required/></div>
-      <div><label className="label">Password</label><div style={{display:"flex",gap:8}}><input className="input" placeholder="Enter password" type={show?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} required/><button type="button" className="btn secondary" onClick={()=>setShow(!show)}>{show?"Hide":"Show"}</button></div></div>
-      {error&&<div className="error">{error}</div>}
+      <div><label className="label" htmlFor="username">Username</label><input id="username" className="input" placeholder="Enter your username" value={username} onChange={e=>setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" autoComplete="username" required/></div>
+      <div><label className="label" htmlFor="password">Password</label><div className="passwordRow"><input id="password" className="input" placeholder="Enter your password" type={show?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" required/><button type="button" className="passwordToggle" aria-label={show?"Hide password":"Show password"} onClick={()=>setShow(!show)}>{show?"Hide":"Show"}</button></div></div>
+      <div className="authUtility"><button type="button" onClick={()=>router.push("/forgot-password")}>Forgot Password?</button></div>
+      {error&&<div className="error" role="alert">{error}</div>}
       <button className="btn primary" disabled={busy}>{busy?"Logging in…":"LOGIN  →"}</button>
-      <button type="button" className="btn outline" onClick={()=>router.push("/register")}>CREATE ACCOUNT</button>
-      <div className="authLinks"><button type="button" onClick={()=>router.push("/forgot-password")}>Forgot Password?</button><button type="button" onClick={()=>router.push("/registration-status")}>Check Registration Status</button></div>
+      <div className="authDivider"><span>OR</span></div>
+      <button type="button" className="btn outline" onClick={()=>router.push("/register")}>CREATE NEW ACCOUNT</button>
+      <div className="authUtility center"><button type="button" onClick={()=>router.push("/registration-status")}>Check Registration Status</button></div>
     </form>
-    <div style={{marginTop:22,textAlign:"center",fontSize:11,color:"#98A2B3"}}>LEARN  •  PRACTICE  •  ANALYSE  •  SUCCEED</div>
-  </div></div>;
+    <div className="authFooter">LEARN  •  PRACTICE  •  ANALYSE  •  SUCCEED</div>
+  </div></main>;
 }
