@@ -23,7 +23,7 @@ export default function Register(){
  }
  const fields:[keyof FormState,string,string][]=[["full_name","Full Name","text"],["mobile","Mobile Number","tel"],["username","Username","text"]];
  return <main className="authWrap"><div className="authCard">
-   <div className="hero"><img src="/mpsc-logo.svg" className="authLogo" alt="MPSC ALL-IN-ONE"/><h1>Create Your Account</h1><div className="muted">Join the MPSC preparation platform</div></div>
+   <div className="hero"><img src="/mpsc-logo.png" className="authLogo" alt="MPSC ALL-IN-ONE"/><h1>Create Your Account</h1><div className="muted">Join the MPSC preparation platform</div></div>
    {done?<div className="form"><div className="success">Registration submitted successfully. Please wait for Admin approval.</div><button className="btn primary" onClick={()=>router.push("/login")}>BACK TO LOGIN</button></div>:
    <form className="form" onSubmit={submit}>
      <div><label className="label" htmlFor="role">Account Type</label><select id="role" className="select" value={form.role} onChange={e=>setField("role",e.target.value as FormState["role"])}><option value="student">Student</option><option value="teacher">Teacher</option></select></div>
