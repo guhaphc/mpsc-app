@@ -3,7 +3,7 @@
 import {useState} from "react";
 import {createClient} from "@/lib/supabase/client";
 
-type Topic={title:string;notes:string;subtopics?:string[]};
+type Topic={id?:string;title:string;notes:string;subtopics?:string[]};
 
 export default function AIStudyNotes(){
  const [subject,setSubject]=useState("");
@@ -13,12 +13,15 @@ export default function AIStudyNotes(){
  const [loading,setLoading]=useState(false);
  const [uploading,setUploading]=useState(false);
  const [error,setError]=useState("");
+ const [message,setMessage]=useState("");
  const [topics,setTopics]=useState<Topic[]>([]);
  const [selected,setSelected]=useState<Topic|null>(null);
+ const [editing,setEditing]=useState(false);
+ const [editNotes,setEditNotes]=useState("");
  const [generatedSubject,setGeneratedSubject]=useState("");
 
  async function generate(){
-  setError("");
+  setError("");setMessage("");
   if(!subject.trim()){setError("Enter a subject first.");return;}
   if(!file){setError("Upload the Master PDF first.");return;}
   if(file.size>50*1024*1024){setError("Each PDF must be 50 MB or smaller.");return;}
@@ -33,50 +36,66 @@ export default function AIStudyNotes(){
    if(uploadError) throw new Error(`Source upload failed: ${uploadError.message}`);
    setUploading(false);
    const form=new FormData();
-   form.append("subject",subject.trim());
-   form.append("stage",stage);
-   form.append("paper",paper);
-   form.append("mode","complete_subject");
-   form.append("sourcePath",path);
-   form.append("sourceName",file.name);
-   form.append("sourceMime",file.type||"application/pdf");
+   form.append("subject",subject.trim());form.append("stage",stage);form.append("paper",paper);
+   form.append("mode","complete_subject");form.append("sourcePath",path);form.append("sourceName",file.name);form.append("sourceMime",file.type||"application/pdf");
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
-   const data=await res.json();
-   if(!res.ok) throw new Error(data.error||"Generation failed.");
-   const next=(data.result?.topics||[]) as Topic[];
-   setTopics(next);setGeneratedSubject(subject.trim());setSelected(null);
+   const data=await res.json();if(!res.ok) throw new Error(data.error||"Generation failed.");
+   setTopics((data.result?.topics||[]) as Topic[]);setGeneratedSubject(subject.trim());setSelected(null);
+   setMessage("Complete subject generated and saved as a draft.");
   }catch(e:any){setError(e?.message||"Generation failed. Please try again.");}
   finally{setUploading(false);setLoading(false);}
+ }
+
+ function openTopic(t:Topic){setSelected(t);setEditing(false);setEditNotes(t.notes);setError("");setMessage("");}
+
+ async function saveTopic(){
+  if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
+  setLoading(true);setError("");setMessage("");
+  try{
+   const form=new FormData();form.append("mode","save_topic");form.append("topicId",selected.id);form.append("notes",editNotes);
+   const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
+   const data=await res.json();if(!res.ok) throw new Error(data.error||"Could not save topic.");
+   const updated={...selected,notes:editNotes};
+   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditing(false);setMessage("Topic saved successfully.");
+  }catch(e:any){setError(e?.message||"Could not save topic.");}finally{setLoading(false);}
+ }
+
+ async function regenerate(){
+  if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
+  setLoading(true);setError("");setMessage("");
+  try{
+   const form=new FormData();form.append("mode","regenerate_topic");form.append("topicId",selected.id);
+   const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
+   const data=await res.json();if(!res.ok) throw new Error(data.error||"Regeneration failed.");
+   const regenerated=data.result as Topic;
+   const updated={...selected,...regenerated,id:selected.id};
+   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditNotes(updated.notes);setEditing(false);setMessage("Topic regenerated and saved.");
+  }catch(e:any){setError(e?.message||"Regeneration failed.");}finally{setLoading(false);}
  }
 
  return <div className="shell">
   <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">AI STUDY NOTES</div></div><a className="btn secondary" href="/teacher">Back</a></header>
   <main className="main">
    <section className="dashboardHero"><div style={{fontSize:12,fontWeight:700,opacity:.8}}>AI-POWERED SUBJECT BUILDER</div><h1 style={{margin:"6px 0",fontSize:27}}>Create Complete Subject Notes</h1><p className="muted">Upload one Master PDF. AI will build a structured, source-grounded subject for teacher review.</p></section>
-   {error&&<div className="error" style={{marginBottom:14}}>{error}</div>}
-   <section className="card">
-    <h2>1. Select Subject</h2>
-    <div className="formGrid">
-     <label>Examination<select className="select" defaultValue="MPSC State Services"><option>MPSC State Services</option></select></label>
-     <label>Stage<select className="select" value={stage} onChange={e=>setStage(e.target.value)}><option>Prelims</option><option>Mains</option></select></label>
-     <label>Paper<select className="select" value={paper} onChange={e=>setPaper(e.target.value)}><option>GS Paper I</option><option>GS Paper II</option><option>GS Paper III</option><option>GS Paper IV</option></select></label>
-     <label>Subject<input className="input" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Medieval History"/></label>
+   {error&&<div className="error" style={{marginBottom:14}}>{error}</div>}{message&&<div className="success" style={{marginBottom:14}}>{message}</div>}
+   <section className="card"><h2>1. Select Subject</h2><div className="formGrid">
+    <label>Examination<select className="select" defaultValue="MPSC State Services"><option>MPSC State Services</option></select></label>
+    <label>Stage<select className="select" value={stage} onChange={e=>setStage(e.target.value)}><option>Prelims</option><option>Mains</option></select></label>
+    <label>Paper<select className="select" value={paper} onChange={e=>setPaper(e.target.value)}><option>GS Paper I</option><option>GS Paper II</option><option>GS Paper III</option><option>GS Paper IV</option></select></label>
+    <label>Subject<input className="input" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Medieval History"/></label>
+   </div></section>
+   <section className="card"><h2>2. Upload Master PDF</h2><p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}</section>
+   <section className="card"><h2>3. Generate</h2><p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p><button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ PROCESSING…"):"✨ GENERATE COMPLETE SUBJECT"}</button>{loading&&<p className="muted" style={{marginTop:10}}>Please keep this page open while Gemini processes the source.</p>}</section>
+   {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>openTopic(t)}>View / Edit</button></div>)}</div></section>}
+   {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review and improve the AI-generated notes before publishing.</p>
+    <div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Additional PDF/image integration will be enabled next. It will update this topic rather than create a duplicate.</p><button className="btn outline" disabled>ADD TO EXISTING NOTES</button></div>
+    {editing?<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:14,minHeight:360,resize:"vertical",lineHeight:1.6}}/>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.6,fontSize:14}}>{selected.notes}</div>}
+    {selected.subtopics?.length?<><h3 style={{marginTop:18}}>Subtopics</h3><ul>{selected.subtopics.map((s,i)=><li key={i} style={{marginBottom:6}}>{s}</li>)}</ul></>:null}
+    <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
+     {!editing?<button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);}}>✏️ Edit Notes</button>:<button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE CHANGES</button>}
+     <button className="btn outline" onClick={regenerate} disabled={loading}>🔄 REGENERATE</button>
     </div>
-   </section>
-   <section className="card">
-    <h2>2. Upload Master PDF</h2>
-    <p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p>
-    <input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>
-    {file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}
-   </section>
-   <section className="card">
-    <h2>3. Generate</h2>
-    <p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p>
-    <button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ GENERATING COMPLETE SUBJECT…"):"✨ GENERATE COMPLETE SUBJECT"}</button>
-    {loading&&<p className="muted" style={{marginTop:10}}>This may take some time for a large PDF. Please keep this page open.</p>}
-   </section>
-   {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={t.title+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>setSelected(t)}>View / Edit</button></div>)}</div></section>}
-   {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review the AI-generated source-grounded notes before publishing.</p><div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Next step: upload additional PDFs/images and AI will integrate useful information into this topic instead of creating a separate note.</p><button className="btn outline" disabled>ADD TO EXISTING NOTES</button></div><div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.6,fontSize:14}}>{selected.notes}</div>{selected.subtopics?.length?<><h3 style={{marginTop:18}}>Subtopics</h3><ul>{selected.subtopics.map((s,i)=><li key={i} style={{marginBottom:6}}>{s}</li>)}</ul></>:null}<div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}><button className="btn outline" disabled>✏️ Edit Notes</button><button className="btn outline" disabled>🔄 Regenerate</button><button className="btn primary" disabled>💾 Save Topic</button></div></section>}
+   </section>}
   </main>
   <nav className="bottomNav"><a href="/teacher">⌂<span>Home</span></a><a href="/teacher/ai-study-notes">▣<span>AI Notes</span></a><a href="/teacher">◉<span>Tests</span></a><a href="/teacher">•••<span>More</span></a></nav>
  </div>;
