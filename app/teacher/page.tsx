@@ -2,12 +2,12 @@ import {redirect} from "next/navigation";
 import {createClient} from "@/lib/supabase/server";
 
 const cards=[
- ["📚","Study Material","Create, organize, edit and publish MPSC notes and PDFs."],
- ["📰","Current Affairs","Create and publish exam-focused current affairs."],
- ["📝","Prelims Test Series","Create MCQs, explanations, difficulty and test sets."],
- ["✍️","Mains Test Series","Create questions, marks, word limits and model-answer points."],
- ["🤖","AI Study Notes","Generate structured study notes from approved source material."],
- ["📊","Student Performance","Review test and answer-writing performance."]
+ ["📚","Study Material","Create, organize, edit and publish MPSC notes and PDFs.","/teacher/study-material"],
+ ["📰","Current Affairs","Create and publish exam-focused current affairs.","/teacher/current-affairs"],
+ ["📝","Prelims Test Series","Create MCQs, explanations, difficulty and test sets.","/teacher/prelims-tests"],
+ ["✍️","Mains Test Series","Create questions, marks, word limits and model-answer points.","/teacher/mains-tests"],
+ ["🤖","AI Study Notes","Generate structured study notes from approved source material.","/teacher/ai-study-notes"],
+ ["📊","Student Performance","Review test and answer-writing performance.","/teacher/student-performance"]
 ];
 
 export default async function TeacherDashboard(){
@@ -25,7 +25,7 @@ export default async function TeacherDashboard(){
    <section className="dashboardHero"><div style={{fontSize:12,fontWeight:700,opacity:.8}}>TEACHER WORKSPACE</div><h1 style={{margin:"6px 0",fontSize:27}}>Welcome, {profile.full_name}</h1><p className="muted">Create, publish and analyse academic content for MPSC learners.</p></section>
    <div className="stats"><div className="stat"><strong>06</strong><span>Academic Areas</span></div><div className="stat"><strong>—</strong><span>Published Notes</span></div><div className="stat"><strong>—</strong><span>Tests Created</span></div><div className="stat"><strong>—</strong><span>Student Reviews</span></div></div>
    <div className="pageHead"><div><h1>Academic Management</h1><div className="muted">Select an area to create and manage content.</div></div></div>
-   <div className="grid">{cards.map(([icon,title,desc])=><div className="module teacherModule" key={title}><div className="quickIcon">{icon}</div><span className="badge">TEACH</span><h3>{title}</h3><p className="muted">{desc}</p><button className="btn outline" disabled>OPEN MODULE</button></div>)}</div>
+   <div className="grid">{cards.map(([icon,title,desc,href])=><div className="module teacherModule" key={title}><div className="quickIcon">{icon}</div><span className="badge">TEACH</span><h3>{title}</h3><p className="muted">{desc}</p><a className="btn outline" href={href}>OPEN MODULE</a></div>)}</div>
   </main>
   <nav className="bottomNav"><a href="/teacher">⌂<span>Home</span></a><a href="/teacher">▣<span>Content</span></a><a href="/teacher">◉<span>Tests</span></a><a href="/teacher">•••<span>More</span></a></nav>
  </div>;
