@@ -47,13 +47,19 @@ export async function POST(request:Request){
    const prompt=`Regenerate the complete MPSC study notes for the existing topic "${topic.title}" in subject "${subject.subject_name}" (${subject.stage}, ${subject.paper}).
 Use the uploaded Master PDF as the primary source. Produce substantially detailed, exam-oriented notes, not a short summary. Preserve the source's important facts, rulers, dates, events, concepts, examples, tables/timelines and terminology relevant to this topic. Organize the content with clear headings and subheadings. Include Prelims-focused facts and Mains-oriented analytical points where supported by the source. Do not invent facts.
 Return ONLY valid JSON:
-{"title":"${topic.title}","notes":"detailed notes...","subtopics":["..."]}
+{"title":"${topic.title}","notes":"overview...","subtopics":[{"title":"...","content":"detailed notes for this subtopic..."}]}
 Existing notes:
 ${topic.notes}`;
    const parsed=await geminiForSource(await sourceResponse.blob(),prompt,source.file_name,"application/pdf",key);
    const updatedNotes=String(parsed.notes||"");const updatedTitle=String(parsed.title||topic.title);
    const {error:updateError}=await supabase.from("study_topics").update({title:updatedTitle,notes:updatedNotes,updated_at:new Date().toISOString()}).eq("id",topicId);
    if(updateError)throw new Error(updateError.message);
+   await supabase.from("study_subtopics").delete().eq("topic_id",topicId);
+   const subs=Array.isArray(parsed.subtopics)?parsed.subtopics:[];
+   if(subs.length){
+    const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,i:number)=>({topic_id:topicId,title:String(typeof s==="string"?s:s.title||`Subtopic ${i+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:i+1})));
+    if(subError)throw new Error(subError.message);
+   }
    return NextResponse.json({ok:true,result:{...parsed,id:topicId}});
   }
 
@@ -68,7 +74,7 @@ ${topic.notes}`;
   const prompt=`Build comprehensive MPSC ${stage} notes for the subject "${subject}" (${paper}).
 Treat the uploaded master source as the primary source. Do not merely summarize it. Extract and organize the complete subject into logical topics and detailed subtopics. For each topic create substantial, exam-oriented notes preserving important facts, dates, personalities, events, definitions, examples, constitutional/legal provisions where present, Maharashtra-relevant points where present, Prelims facts, Mains analytical points, comparisons, timelines and tables supported by the source. Aim for comprehensive coverage of the source rather than a short overview. Do not invent facts or citations.
 Return ONLY valid JSON:
-{"topics":[{"title":"...","notes":"detailed comprehensive notes with headings...","subtopics":["..."]}],"study_plan":["..."]}`;
+{"topics":[{"title":"...","notes":"topic overview and synthesis...","subtopics":[{"title":"...","content":"detailed notes for this subtopic..."}]}],"study_plan":["..."]}`;
   const parsed=await geminiForSource(sourceBlob,prompt,sourceName,sourceMime,key);
   const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(parsed.subject_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
   if(subjectError||!subjectRow)throw new Error(subjectError?.message||"Could not save generated subject.");
@@ -79,7 +85,15 @@ Return ONLY valid JSON:
   if(topics.length){
    const {data:rows,error:topicError}=await supabase.from("study_topics").insert(topics.map((t:any,i:number)=>({subject_id:subjectRow.id,title:String(t.title||`Topic ${i+1}`),sort_order:i+1,notes:String(t.notes||""),status:"draft"}))).select("id,title,notes");
    if(topicError)throw new Error(topicError.message);
-   savedTopics=(rows||[]).map((r:any,i:number)=>({...topics[i],id:r.id,title:r.title,notes:r.notes}));
+   for(let i=0;i<(rows||[]).length;i++){
+    const row:any=(rows||[])[i], sourceTopic:any=topics[i];
+    const subs=Array.isArray(sourceTopic?.subtopics)?sourceTopic.subtopics:[];
+    if(subs.length){
+      const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,j:number)=>({topic_id:row.id,title:String(typeof s==="string"?s:s.title||`Subtopic ${j+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:j+1})));
+      if(subError)throw new Error(subError.message);
+    }
+  }
+  savedTopics=(rows||[]).map((r:any,i:number)=>({...topics[i],id:r.id,title:r.title,notes:r.notes}));
   }
   const {error:generationError}=await supabase.from("study_note_generations").insert({subject_id:subjectRow.id,source_id:sourceRow.id,generation_type:"complete_subject",status:"completed",message:"Generated from Master PDF using Gemini.",created_by:profile.id,completed_at:new Date().toISOString()});
   if(generationError)throw new Error(generationError.message);
