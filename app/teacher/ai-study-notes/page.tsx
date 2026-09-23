@@ -55,6 +55,18 @@ export default function AIStudyNotes(){
 
  function openTopic(t:Topic){setSelected(t);setEditing(false);setEditNotes(t.notes);setError("");setMessage("");}
 
+ async function saveSubtopic(){
+  if(!selectedSubtopic?.id)return;setLoading(true);setError("");setMessage("");
+  try{const form=new FormData();form.append("mode","save_subtopic");form.append("subtopicId",selectedSubtopic.id);form.append("title",selectedSubtopic.title);form.append("content",subtopicNotes);const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not save subtopic.");const updated={...selectedSubtopic,content:subtopicNotes};setSelectedSubtopic(updated);setSelected(prev=>prev?{...prev,subtopics:(prev.subtopics||[]).map(s=>s.id===updated.id?updated:s)}:prev);setTopics(prev=>prev.map(t=>t.id===selected?.id?{...t,subtopics:(t.subtopics||[]).map(s=>s.id===updated.id?updated:s)}:t));setSubtopicEditing(false);setMessage("Subtopic saved.");}catch(e:any){setError(e?.message||"Could not save subtopic.");}finally{setLoading(false);}
+ }
+ async function deleteSubtopic(){
+  if(!selectedSubtopic?.id)return;if(!confirm("Delete this subtopic permanently?"))return;setLoading(true);setError("");setMessage("");
+  try{const form=new FormData();form.append("mode","delete_subtopic");form.append("subtopicId",selectedSubtopic.id);const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not delete subtopic.");setSelected(prev=>prev?{...prev,subtopics:(prev.subtopics||[]).filter(s=>s.id!==selectedSubtopic.id)}:prev);setTopics(prev=>prev.map(t=>t.id===selected?.id?{...t,subtopics:(t.subtopics||[]).filter(s=>s.id!==selectedSubtopic.id)}:t));setSelectedSubtopic(null);setMessage("Subtopic deleted.");}catch(e:any){setError(e?.message||"Could not delete subtopic.");}finally{setLoading(false);}
+ }
+ async function regenerateSubtopic(){
+  if(!selectedSubtopic?.id)return;setLoading(true);setError("");setMessage("");
+  try{const form=new FormData();form.append("mode","regenerate_subtopic");form.append("subtopicId",selectedSubtopic.id);const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not regenerate subtopic.");const updated=data.result as Subtopic;setSelectedSubtopic(updated);setSubtopicNotes(updated.content);setSelected(prev=>prev?{...prev,subtopics:(prev.subtopics||[]).map(s=>s.id===updated.id?updated:s)}:prev);setTopics(prev=>prev.map(t=>t.id===selected?.id?{...t,subtopics:(t.subtopics||[]).map(s=>s.id===updated.id?updated:s)}:t));setMessage("Subtopic regenerated.");}catch(e:any){setError(e?.message||"Could not regenerate subtopic.");}finally{setLoading(false);}
+ }
  async function saveTopic(){
   if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
   setLoading(true);setError("");setMessage("");
