@@ -14,3 +14,5 @@ Logo deployment sync.
 Latest production deployment trigger.
 
 Admin dashboard role split implemented.
+
+Admin dashboard refresh deployment trigger.
