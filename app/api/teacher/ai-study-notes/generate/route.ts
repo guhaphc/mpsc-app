@@ -75,7 +75,7 @@ Return ONLY valid JSON:
   const {data:sourceRow,error:sourceError}=await supabase.from("study_sources").insert({subject_id:subjectRow.id,source_type:"master_pdf",file_name:sourceName,storage_path:sourcePath,created_by:profile.id}).select("id").single();
   if(sourceError||!sourceRow)throw new Error(sourceError?.message||"Could not save source record.");
   const topics=Array.isArray(parsed.topics)?parsed.topics:[];
-  let savedTopics:Topic[]=[];
+  let savedTopics:any[]=[];
   if(topics.length){
    const {data:rows,error:topicError}=await supabase.from("study_topics").insert(topics.map((t:any,i:number)=>({subject_id:subjectRow.id,title:String(t.title||`Topic ${i+1}`),sort_order:i+1,notes:String(t.notes||""),status:"draft"}))).select("id,title,notes");
    if(topicError)throw new Error(topicError.message);
