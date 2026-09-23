@@ -3,7 +3,8 @@
 import {useState} from "react";
 import {createClient} from "@/lib/supabase/client";
 
-type Topic={id?:string;title:string;notes:string;subtopics?:string[]};
+type Subtopic={title:string;content:string};
+type Topic={id?:string;title:string;notes:string;subtopics?:Subtopic[]};
 
 export default function AIStudyNotes(){
  const [subject,setSubject]=useState("");
@@ -90,7 +91,7 @@ export default function AIStudyNotes(){
    {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review and improve the AI-generated notes before publishing.</p>
     <div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Additional PDF/image integration will be enabled next. It will update this topic rather than create a duplicate.</p><button className="btn outline" disabled>ADD TO EXISTING NOTES</button></div>
     {editing?<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:14,minHeight:360,resize:"vertical",lineHeight:1.6}}/>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.6,fontSize:14}}>{selected.notes}</div>}
-    {selected.subtopics?.length?<><h3 style={{marginTop:18}}>Subtopics</h3><ul>{selected.subtopics.map((s,i)=><li key={i} style={{marginBottom:6}}>{s}</li>)}</ul></>:null}
+    {selected.subtopics?.length?<div style={{marginTop:22}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h3 style={{marginTop:0}}>{i+1}. {s.title}</h3><div style={{whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{s.content}</div></article>)}</div>:null}
     <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
      {!editing?<button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);}}>✏️ Edit Notes</button>:<button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE CHANGES</button>}
      <button className="btn outline" onClick={regenerate} disabled={loading}>🔄 REGENERATE</button>
