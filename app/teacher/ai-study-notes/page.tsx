@@ -2,45 +2,86 @@
 
 import {useState} from "react";
 
+type Topic={title:string;notes:string;subtopics?:string[]};
+
 export default function AIStudyNotes(){
  const [subject,setSubject]=useState("");
  const [stage,setStage]=useState("Mains");
- const [generated,setGenerated]=useState(false);
- const [topic,setTopic]=useState("");
+ const [paper,setPaper]=useState("GS Paper II");
+ const [file,setFile]=useState<File|null>(null);
+ const [loading,setLoading]=useState(false);
+ const [error,setError]=useState("");
+ const [topics,setTopics]=useState<Topic[]>([]);
+ const [selected,setSelected]=useState<Topic|null>(null);
+ const [generatedSubject,setGeneratedSubject]=useState("");
+
+ async function generate(){
+  setError("");
+  if(!subject.trim()){setError("Enter a subject first.");return;}
+  if(!file){setError("Upload the Master PDF first.");return;}
+  setLoading(true);
+  try{
+   const form=new FormData();
+   form.append("subject",subject.trim());
+   form.append("stage",stage);
+   form.append("paper",paper);
+   form.append("mode","complete_subject");
+   form.append("files",file,file.name);
+   const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
+   const data=await res.json();
+   if(!res.ok) throw new Error(data.error||"Generation failed.");
+   const next=(data.result?.topics||[]) as Topic[];
+   setTopics(next);
+   setGeneratedSubject(subject.trim());
+   setSelected(null);
+  }catch(e:any){setError(e?.message||"Generation failed. Please try again.");}
+  finally{setLoading(false);}
+ }
+
  return <div className="shell">
   <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">AI STUDY NOTES</div></div><a className="btn secondary" href="/teacher">Back</a></header>
   <main className="main">
-   <section className="dashboardHero"><div style={{fontSize:12,fontWeight:700,opacity:.8}}>AI-POWERED SUBJECT BUILDER</div><h1 style={{margin:"6px 0",fontSize:27}}>Create Complete Subject Notes</h1><p className="muted">Use one master PDF to build the subject. Later, improve any topic with additional PDFs or images.</p></section>
+   <section className="dashboardHero"><div style={{fontSize:12,fontWeight:700,opacity:.8}}>AI-POWERED SUBJECT BUILDER</div><h1 style={{margin:"6px 0",fontSize:27}}>Create Complete Subject Notes</h1><p className="muted">Upload one Master PDF. AI will build a structured, source-grounded subject for teacher review.</p></section>
+
+   {error&&<div className="error" style={{marginBottom:14}}>{error}</div>}
+
    <section className="card">
     <h2>1. Select Subject</h2>
     <div className="formGrid">
-     <label>Examination<select defaultValue="MPSC State Services"><option>MPSC State Services</option></select></label>
-     <label>Stage<select value={stage} onChange={e=>setStage(e.target.value)}><option>Prelims</option><option>Mains</option></select></label>
-     <label>Paper<select defaultValue="GS Paper II"><option>GS Paper I</option><option>GS Paper II</option><option>GS Paper III</option><option>GS Paper IV</option></select></label>
-     <label>Subject<input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Indian Polity"/></label>
+     <label>Examination<select className="select" defaultValue="MPSC State Services"><option>MPSC State Services</option></select></label>
+     <label>Stage<select className="select" value={stage} onChange={e=>setStage(e.target.value)}><option>Prelims</option><option>Mains</option></select></label>
+     <label>Paper<select className="select" value={paper} onChange={e=>setPaper(e.target.value)}><option>GS Paper I</option><option>GS Paper II</option><option>GS Paper III</option><option>GS Paper IV</option></select></label>
+     <label>Subject<input className="input" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Medieval History"/></label>
     </div>
    </section>
+
    <section className="card">
     <h2>2. Upload Master PDF</h2>
-    <p className="muted">This PDF will be used to create the complete subject according to the master syllabus.</p>
-    <input type="file" accept=".pdf,application/pdf"/>
+    <p className="muted">The uploaded PDF is sent securely to the server-side AI process. It is used as the primary source for generation.</p>
+    <input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>
+    {file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}
    </section>
+
    <section className="card">
     <h2>3. Generate</h2>
-    <p className="muted">AI will organize the syllabus, topics and subtopics and create comprehensive exam-oriented notes.</p>
-    <button className="btn primary" onClick={()=>setGenerated(true)} disabled={!subject}>✨ GENERATE COMPLETE SUBJECT</button>
-    {!subject&&<p className="muted" style={{marginTop:8}}>Enter a subject first.</p>}
+    <p className="muted">AI will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p>
+    <button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?"✨ GENERATING COMPLETE SUBJECT…":"✨ GENERATE COMPLETE SUBJECT"}</button>
+    {loading&&<p className="muted" style={{marginTop:10}}>This may take some time for a large PDF. Please keep this page open.</p>}
    </section>
-   {generated&&<section className="card">
-    <h2>✓ Subject Generated</h2>
-    <p className="muted">{subject} · {stage}</p>
-    <div className="topicList">{["Historical Background","Making of the Constitution","Preamble","Fundamental Rights","Directive Principles","Fundamental Duties","Parliament","Judiciary","Federalism","Constitutional Bodies"].map(t=><div className="topicRow" key={t}><span>{t}</span><span><button className="btn outline" onClick={()=>setTopic(t)}>View / Edit</button></span></div>)}</div>
+
+   {topics.length>0&&<section className="card">
+    <h2>✓ {generatedSubject}</h2>
+    <p className="muted">{topics.length} topics generated · Draft for teacher review</p>
+    <div className="topicList">{topics.map((t,i)=><div className="topicRow" key={t.title+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>setSelected(t)}>View / Edit</button></div>)}</div>
    </section>}
-   {topic&&<section className="card">
-    <h2>{topic}</h2>
-    <p className="muted">Review the generated notes for this topic.</p>
-    <div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Upload additional PDF or images. AI will integrate the useful information into this topic instead of creating a separate note.</p><input type="file" accept=".pdf,image/*" multiple/><button className="btn outline" style={{marginTop:10}}>✨ ADD TO EXISTING NOTES</button></div>
-    <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}><button className="btn outline">✏️ Edit Notes</button><button className="btn outline">🔄 Regenerate</button><button className="btn primary">💾 Save Topic</button></div>
+
+   {selected&&<section className="card">
+    <h2>{selected.title}</h2>
+    <p className="muted">Review the AI-generated source-grounded notes before publishing.</p>
+    <div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Next step: upload additional PDFs/images and AI will integrate useful information into this topic instead of creating a separate note.</p><button className="btn outline" disabled>ADD TO EXISTING NOTES</button></div>
+    <div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.6,fontSize:14}}>{selected.notes}</div>
+    {selected.subtopics?.length ? <><h3 style={{marginTop:18}}>Subtopics</h3><ul>{selected.subtopics.map((s,i)=><li key={i} style={{marginBottom:6}}>{s}</li>)}</ul></>:null}
+    <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}><button className="btn outline" disabled>✏️ Edit Notes</button><button className="btn outline" disabled>🔄 Regenerate</button><button className="btn primary" disabled>💾 Save Topic</button></div>
    </section>}
   </main>
   <nav className="bottomNav"><a href="/teacher">⌂<span>Home</span></a><a href="/teacher/ai-study-notes">▣<span>AI Notes</span></a><a href="/teacher">◉<span>Tests</span></a><a href="/teacher">•••<span>More</span></a></nav>
