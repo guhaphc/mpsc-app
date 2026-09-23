@@ -20,6 +20,9 @@ export default function AIStudyNotes(){
  const [editing,setEditing]=useState(false);
  const [editNotes,setEditNotes]=useState("");
  const [generatedSubject,setGeneratedSubject]=useState("");
+ const [adding,setAdding]=useState(false);
+ const [newTitle,setNewTitle]=useState("");
+ const [newNotes,setNewNotes]=useState("");
 
  async function generate(){
   setError("");setMessage("");
@@ -41,7 +44,7 @@ export default function AIStudyNotes(){
    form.append("mode","complete_subject");form.append("sourcePath",path);form.append("sourceName",file.name);form.append("sourceMime",file.type||"application/pdf");
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
    const data=await res.json();if(!res.ok) throw new Error(data.error||"Generation failed.");
-   setTopics((data.result?.topics||[]) as Topic[]);setGeneratedSubject(subject.trim());setSelected(null);
+   setTopics(((data.result?.topics||[]) as Topic[]).map(t=>({...t,subject_id:data.subjectId})));setGeneratedSubject(subject.trim());setSelected(null);
    setMessage("Complete subject generated and saved as a draft.");
   }catch(e:any){setError(e?.message||"Generation failed. Please try again.");}
   finally{setUploading(false);setLoading(false);}
@@ -87,9 +90,9 @@ export default function AIStudyNotes(){
    </div></section>
    <section className="card"><h2>2. Upload Master PDF</h2><p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}</section>
    <section className="card"><h2>3. Generate</h2><p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p><button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ PROCESSING…"):"✨ GENERATE COMPLETE SUBJECT"}</button>{loading&&<p className="muted" style={{marginTop:10}}>Please keep this page open while Gemini processes the source.</p>}</section>
-   {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>openTopic(t)}>View / Edit</button></div>)}</div></section>}
+   {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>openTopic(t)}>VIEW / EDIT</button></div>)}</div></section>}
    {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review and improve the AI-generated notes before publishing.</p>
-    <div className="sourceBox"><strong>➕ Add to Existing Notes</strong><p className="muted">Additional PDF/image integration will be enabled next. It will update this topic rather than create a duplicate.</p><button className="btn outline" disabled>ADD TO EXISTING NOTES</button></div>
+    
     {editing?<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:14,minHeight:360,resize:"vertical",lineHeight:1.6}}/>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.6,fontSize:14}}>{selected.notes}</div>}
     {selected.subtopics?.length?<div style={{marginTop:22}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h3 style={{marginTop:0}}>{i+1}. {s.title}</h3><div style={{whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{s.content}</div></article>)}</div>:null}
     <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
