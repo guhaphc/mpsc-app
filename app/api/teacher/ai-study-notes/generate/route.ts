@@ -24,6 +24,17 @@ export async function POST(request:Request){
   if(!profile||profile.role!=="teacher"||profile.account_status!=="active")return NextResponse.json({error:"Only active teachers can manage study notes."},{status:403});
   const key=process.env.GEMINI_API_KEY;if(!key)return NextResponse.json({error:"AI service is not configured yet."},{status:503});
   const form=await request.formData();const mode=String(form.get("mode")||"complete_subject");
+  if(mode==="add_subtopic"){
+   const subjectId=String(form.get("subjectId")||"");const title=String(form.get("title")||"").trim();const notes=String(form.get("notes")||"");
+   if(!subjectId||!title)return NextResponse.json({error:"Subject and subtopic title are required."},{status:400});
+   const {data:maxRow}=await supabase.from("study_topics").select("sort_order").eq("subject_id",subjectId).order("sort_order",{ascending:false}).limit(1).maybeSingle();
+   const {data:topic,error}=await supabase.from("study_topics").insert({subject_id:subjectId,title,notes,sort_order:(maxRow?.sort_order||0)+1,status:"draft"}).select("id,title,notes").single();
+   if(error||!topic)throw new Error(error?.message||"Could not add subtopic.");return NextResponse.json({ok:true,topic});
+  }
+  if(mode==="delete_topic"){
+   const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
+  }
   if(mode==="save_topic"){
    const topicId=String(form.get("topicId")||"");const notes=String(form.get("notes")||"");
    if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
