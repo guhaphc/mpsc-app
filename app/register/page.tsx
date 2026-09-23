@@ -16,11 +16,9 @@ export default function Register(){
   if(!/^\d{10}$/.test(mobile)){setError("Please enter a valid 10 digit mobile number.");return;}
   if(form.password.length<6){setError("Password must be at least 6 characters.");return;}
   setBusy(true);const supabase=createClient();
-  if(form.role==="student"){
-   const {data:blocked,error:blockedError}=await supabase.rpc("is_mobile_blocked",{identifier:mobile});
-   if(blockedError){setError("Unable to verify registration details. Please try again.");setBusy(false);return;}
-   if(blocked){setError("This mobile number is blocked from registration. Please contact the administrator.");setBusy(false);return;}
-  }
+  const {data:blocked,error:blockedError}=await supabase.rpc("is_mobile_blocked",{identifier:mobile});
+  if(blockedError){setError("Unable to verify registration details. Please try again.");setBusy(false);return;}
+  if(blocked){setError("This mobile number is blocked from registration. Please contact the administrator.");setBusy(false);return;}
   const {data:existing,error:lookupError}=await supabase.rpc("resolve_login_identifier",{identifier:username});
   if(lookupError){setError("Unable to verify registration details. Please try again.");setBusy(false);return;}
   if(existing){setError("This username is already registered. Please choose another username.");setBusy(false);return;}
