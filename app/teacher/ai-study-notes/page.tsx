@@ -4,7 +4,7 @@ import {useState} from "react";
 import {createClient} from "@/lib/supabase/client";
 
 type Subtopic={id?:string;title:string;content:string;sort_order?:number};
-type Topic={id?:string;title:string;notes:string;subtopics?:Subtopic[]};
+type Topic={id?:string;title:string;notes:string;subtopics?:Subtopic[];subject_id?:string};
 
 export default function AIStudyNotes(){
  const [subject,setSubject]=useState("");
