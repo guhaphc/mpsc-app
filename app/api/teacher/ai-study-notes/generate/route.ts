@@ -3,7 +3,7 @@ import {createClient} from "@/lib/supabase/server";
 
 const MODEL=process.env.OPENAI_NOTES_MODEL||"gpt-5.6-luna";
 
-export async function POST(request:Request){
+export const runtime="nodejs";\nexport const maxDuration=300;\n\nexport async function POST(request:Request){
  try{
   const supabase=await createClient();
   const {data}=await supabase.auth.getClaims();
@@ -43,6 +43,38 @@ export async function POST(request:Request){
   const text=result.output_text||result.output?.flatMap((x:any)=>x.content||[]).map((x:any)=>x.text||"").join("")||"";
   const cleaned=text.replace(/^\s*\`\`\`json\s*/,"").replace(/\s*\`\`\`\s*$/,"").trim();
   let parsed; try{parsed=JSON.parse(cleaned);}catch{throw new Error("AI returned an invalid note format. Please try again.");}
-  return NextResponse.json({ok:true,model:MODEL,result:parsed});
+  if(mode==="complete_subject"){
+   const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({
+    exam:"MPSC State Services",stage,paper,subject_name:String(parsed.subject_title||subject),
+    syllabus_source_name:files[0]?.name||"Master PDF",status:"draft",created_by:profile.id
+   }).select("id,subject_name").single();
+   if(subjectError||!subjectRow) throw new Error(subjectError?.message||"Could not save generated subject.");
+
+   const {data:sourceRow,error:sourceError}=await supabase.from("study_sources").insert({
+    subject_id:subjectRow.id,source_type:"master_pdf",file_name:files[0]?.name||"Master PDF",
+    storage_path:uploaded[0]||null,created_by:profile.id
+   }).select("id").single();
+   if(sourceError||!sourceRow) throw new Error(sourceError?.message||"Could not save source record.");
+
+   const topics=Array.isArray(parsed.topics)?parsed.topics:[];
+   if(topics.length){
+    const {error:topicError}=await supabase.from("study_topics").insert(topics.map((t:any,i:number)=>({
+     subject_id:subjectRow.id,title:String(t.title||`Topic ${i+1}`),sort_order:i+1,
+     notes:String(t.notes||""),status:"draft"
+    })));
+    if(topicError) throw new Error(topicError.message);
+   }
+
+   const {error:generationError}=await supabase.from("study_note_generations").insert({
+    subject_id:subjectRow.id,source_id:sourceRow.id,generation_type:"complete_subject",
+    status:"completed",message:"Generated from Master PDF.",created_by:profile.id,
+    completed_at:new Date().toISOString()
+   });
+   if(generationError) throw new Error(generationError.message);
+
+   return NextResponse.json({ok:true,model:MODEL,result:parsed,subjectId:subjectRow.id,saved:true});
+  }
+
+  return NextResponse.json({ok:true,model:MODEL,result:parsed,saved:false});
  }catch(error:any){return NextResponse.json({error:error?.message||"Unable to generate notes."},{status:500});}
 }
