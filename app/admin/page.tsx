@@ -1,6 +1,7 @@
 import {redirect} from "next/navigation";
 import {createClient} from "@/lib/supabase/server";
 import AdminAccountActions from "./AdminAccountActions";
+import AdminBlockButton from "./AdminBlockButton";
 
 export default async function AdminDashboard(){
  const supabase=await createClient();const {data}=await supabase.auth.getClaims();if(!data?.claims)redirect("/login");
@@ -9,7 +10,7 @@ export default async function AdminDashboard(){
  if(error)return <div className="authWrap"><div className="card"><h2>Admin Dashboard</h2><div className="error">Unable to load users.</div></div></div>;
  const list=users??[],students=list.filter(u=>u.role==="student"),teachers=list.filter(u=>u.role==="teacher"),pendingStudents=students.filter(u=>u.account_status==="pending"),pending=list.filter(u=>u.account_status==="pending").length,active=list.filter(u=>u.account_status==="active").length;
  function UserRow({u}:{u:(typeof list)[number]}){return <tr key={u.id}><td><strong>{u.full_name}</strong><small>{u.username} · {u.mobile}</small></td><td><span className={"status "+u.account_status}>{u.account_status}</span></td><td>{new Date(u.created_at).toLocaleDateString("en-IN")}</td><td><div className="actions">
- {u.account_status==="pending"&&<><form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="active"/><button className="btn small primary">Approve</button></form><form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="rejected"/><button className="btn small danger">Reject</button></form>{u.role==="student"&&<form action="/api/admin/user-status" method="post" onSubmit={(e)=>{if(!confirm("Permanently block this student's name and mobile number?"))e.preventDefault();}}><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="blocked"/><button className="btn small danger">Block</button></form>}</>}
+ {u.account_status==="pending"&&<><form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="active"/><button className="btn small primary">Approve</button></form><form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="rejected"/><button className="btn small danger">Reject</button></form>{u.role==="student"&&<AdminBlockButton userId={u.id}/>}</>}
  {u.account_status==="active"&&<form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="disabled"/><button className="btn small secondary">Disable</button></form>}
  {u.account_status==="disabled"&&<form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="active"/><button className="btn small primary">Enable</button></form>}
  {u.account_status==="rejected"&&<form action="/api/admin/user-status" method="post"><input type="hidden" name="user_id" value={u.id}/><input type="hidden" name="status" value="pending"/><button className="btn small secondary">Reopen</button></form>}
