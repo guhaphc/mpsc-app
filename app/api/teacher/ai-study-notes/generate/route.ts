@@ -58,6 +58,16 @@ export async function POST(request:Request){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
    const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
   }
+  if(mode==="refresh_keywords"){
+   const topicId=String(form.get("topicId")||"");
+   if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   const {data:subs,error:subError}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
+   if(subError)throw new Error(subError.message);
+   if(!subs?.length)return NextResponse.json({error:"No subtopics found for this topic."},{status:400});
+   await saveImportantKeywords(supabase,ai,topicId,subs);
+   const {data:updated}=await supabase.from("study_subtopics").select("id,title,content,sort_order,important_keywords").eq("topic_id",topicId).order("sort_order");
+   return NextResponse.json({ok:true,subtopics:updated||[]});
+  }
   if(mode==="set_topic_status"){
    const topicId=String(form.get("topicId")||"");
    const status=String(form.get("status")||"draft");
