@@ -1,18 +1,4 @@
-"use client";\nfunction MarkdownText({text}:{text:string}) {
- const lines=String(text||"").replace(/\r/g,"").split("\n");
- return <div>{lines.map((raw,i)=>{
-  let line=raw.trim(); if(!line)return <div key={i} style={{height:10}}/>;
-  let heading=false;
-  if(/^#{1,3}\s+/.test(line)){line=line.replace(/^#{1,3}\s+/,"");heading=true;}
-  if(!heading && /^(?:\*\*)?[^*]{2,100}(?:\*\*)?:$/.test(line)){line=line.replace(/^\*\*|\*\*$/g,"");heading=true;}
-  const bullet=/^(?:[-*]|\d+[.)])\s+/.test(line); if(bullet)line=line.replace(/^(?:[-*]|\d+[.)])\s+/,"");
-  const parts=line.split(/(\*\*[^*]+\*\*)/g).map((p,j)=>p.startsWith("**")&&p.endsWith("**")?<strong key={j}>{p.slice(2,-2)}</strong>:p);
-  return <div key={i} style={{marginTop:i===0?0:bullet||heading?12:5,fontWeight:heading?800:undefined,fontSize:heading?18:undefined,paddingLeft:bullet?14:0,position:"relative",paddingTop:heading&&i>0?6:0,borderBottom:heading?"1px solid var(--line)":"none",paddingBottom:heading?6:0}}>{bullet&&<span style={{position:"absolute",left:0}}>•</span>}{parts}</div>;
- })}</div>;
-}
-
-
-import {useEffect,useState} from "react";
+"use client";\nimport {useEffect,useState} from "react";
 type Keyword={term:string;category:string;importance?:string};
 type Sub={id:string;title:string;content:string;important_keywords?:Keyword[]};
 export default function ReaderControls({title,notes,topicId,initialBookmarked,initialCompleted,subtopics}:{title:string;notes:string;topicId:string;initialBookmarked:boolean;initialCompleted:boolean;subtopics:Sub[]}) {
@@ -43,4 +29,17 @@ export default function ReaderControls({title,notes,topicId,initialBookmarked,in
   <div style={{marginTop:22,padding:18,border:"1px solid var(--line)",borderRadius:18,background:bg,textAlign:"center"}}><div style={{fontWeight:900,fontSize:16}}>{completed?"✅ Notes Completed":"📖 Finished reading?"}</div><p className="muted" style={{margin:"6px 0 12px"}}>{completed?"This chapter is marked as completed.":"Mark this chapter completed after you finish reading it."}</p><button className={completed?"btn secondary":"btn primary"} onClick={markCompleted} disabled={completing}>{completing?"Saving…":completed?"✓ Marked Completed":"✓ MARK AS COMPLETED"}</button></div>
   {(keyword||explaining||explanation)&&<div style={{position:"fixed",inset:0,zIndex:20,background:"rgba(0,0,0,.52)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>{if(!explaining){setKeyword(null);setExplanation("")}}}><div style={{width:"min(760px,100%)",maxHeight:"82vh",overflowY:"auto",background:bg,color:fg,borderRadius:"24px 24px 0 0",padding:"24px 22px 30px",boxShadow:"0 -12px 45px rgba(0,0,0,.25)"}} onClick={e=>e.stopPropagation()}><div style={{width:42,height:4,borderRadius:4,background:"currentColor",opacity:.25,margin:"0 auto 18px"}}/><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}><div><div style={{fontSize:11,fontWeight:800,opacity:.65,textTransform:"uppercase"}}>{keyword?.category||"Important term"}</div><h2 style={{margin:"4px 0 0",fontSize:26}}>✨ {keyword?.term}</h2></div><button className="btn secondary" onClick={()=>{setKeyword(null);setExplanation("")}}>×</button></div><div style={{marginTop:20,lineHeight:1.75,fontSize:16}}>{explaining?<div>✨ Preparing a source-based explanation…</div>:<MarkdownText text={explanation}/>}</div></div></div>}
  </div>;
+}function MarkdownText({text}:{text:string}) {
+ const lines=String(text||"").replace(/\r/g,"").split("\n");
+ return <div>{lines.map((raw,i)=>{
+  let line=raw.trim(); if(!line)return <div key={i} style={{height:10}}/>;
+  let heading=false;
+  if(/^#{1,3}\s+/.test(line)){line=line.replace(/^#{1,3}\s+/,"");heading=true;}
+  if(!heading && /^(?:\*\*)?[^*]{2,100}(?:\*\*)?:$/.test(line)){line=line.replace(/^\*\*|\*\*$/g,"");heading=true;}
+  const bullet=/^(?:[-*]|\d+[.)])\s+/.test(line); if(bullet)line=line.replace(/^(?:[-*]|\d+[.)])\s+/,"");
+  const parts=line.split(/(\*\*[^*]+\*\*)/g).map((p,j)=>p.startsWith("**")&&p.endsWith("**")?<strong key={j}>{p.slice(2,-2)}</strong>:p);
+  return <div key={i} style={{marginTop:i===0?0:bullet||heading?12:5,fontWeight:heading?800:undefined,fontSize:heading?18:undefined,paddingLeft:bullet?14:0,position:"relative",paddingTop:heading&&i>0?6:0,borderBottom:heading?"1px solid var(--line)":"none",paddingBottom:heading?6:0}}>{bullet&&<span style={{position:"absolute",left:0}}>•</span>}{parts}</div>;
+ })}</div>;
 }
+
+
