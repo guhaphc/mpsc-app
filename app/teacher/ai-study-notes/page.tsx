@@ -96,10 +96,10 @@ export default function AIStudyNotes(){
   if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
   setLoading(true);setError("");setMessage("");
   try{
-   const form=new FormData();form.append("mode","save_complete_topic");form.append("topicId",selected.id);form.append("notes",editNotes);form.append("subtopics",JSON.stringify(editSubtopics.map((s,i)=>({title:s.title,content:s.content,sort_order:i+1}))));
+   const form=new FormData();form.append("mode","save_complete_topic");form.append("topicId",selected.id);form.append("notes",editNotes);form.append("subtopics",JSON.stringify(editSubtopics.map((s,i)=>({title:s.title,content:s.content,content_blocks:s.content_blocks||[],sort_order:i+1}))));
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
    const data=await res.json();if(!res.ok) throw new Error(data.error||"Could not save complete topic.");
-   const updated={...selected,notes:editNotes,content_blocks:[],subtopics:editSubtopics.map((s,i)=>({...s,sort_order:i+1}))};
+   const updated={...selected,notes:editNotes,subtopics:editSubtopics.map((s,i)=>({...s,sort_order:i+1}))};
    setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditing(false);setMessage("Complete topic saved successfully.");
   }catch(e:any){setError(e?.message||"Could not save complete topic.");}finally{setLoading(false);}
  }
