@@ -1,3 +1,4 @@
+// Note label formatting: structured bullet labels are rendered in bold.
 "use client";
 
 import {useState} from "react";
