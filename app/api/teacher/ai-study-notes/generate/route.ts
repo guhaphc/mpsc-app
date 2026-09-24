@@ -23,6 +23,21 @@ async function saveImportantKeywords(supabase:any,ai:any,topicId:string,subtopic
 export const runtime="nodejs";
 export const maxDuration=300;
 
+function cleanContentBlocks(value:any){
+ const allowed=new Set(["heading","subheading","paragraph","bullet","numbered","callout","table"]);
+ if(!Array.isArray(value)) return [];
+ return value.map((b:any)=>{
+  const type=allowed.has(String(b?.type))?String(b.type):"paragraph";
+  const out:any={type};
+  if(type==="table"){
+   out.columns=Array.isArray(b?.columns)?b.columns.map((x:any)=>String(x||"")):[];
+   out.rows=Array.isArray(b?.rows)?b.rows.map((r:any)=>Array.isArray(r)?r.map((x:any)=>String(x||"")):[]):[];
+  }else if(type==="bullet"||type==="numbered") out.items=Array.isArray(b?.items)?b.items.map((x:any)=>String(x||"")).filter(Boolean):[];
+  else out.text=String(b?.text||"").trim();
+  return out;
+ }).filter((b:any)=>b.type==="table"?b.columns.length>0&&b.rows.length>0:b.type==="bullet"||b.type==="numbered"?b.items.length>0:b.text);
+}
+
 async function geminiForSource(sourceBlob:Blob,prompt:string,sourceName:string,sourceMime:string,key:string){
  const ai=new GoogleGenAI({apiKey:key});
  const uploaded=await ai.files.upload({file:sourceBlob,config:{displayName:sourceName,mimeType:sourceMime}});
@@ -44,12 +59,12 @@ export async function POST(request:Request){
   const form=await request.formData();const mode=String(form.get("mode")||"complete_subject");
   if(mode==="save_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); const title=String(form.get("title")||"").trim(); const content=String(form.get("content")||""); if(!subtopicId||!title)return NextResponse.json({error:"Subtopic details are required."},{status:400}); const {data:sub,error}=await supabase.from("study_subtopics").select("id").eq("id",subtopicId).single(); if(error||!sub)return NextResponse.json({error:"Subtopic not found."},{status:404}); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); const {data:parent}=await supabase.from("study_subtopics").select("topic_id,sort_order").eq("id",subtopicId).single(); if(parent) await saveImportantKeywords(supabase,ai,parent.topic_id,[{title,content,sort_order:parent.sort_order}]); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
   if(mode==="delete_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {error}=await supabase.from("study_subtopics").delete().eq("id",subtopicId); if(error)throw new Error(error.message); return NextResponse.json({ok:true}); }
-  if(mode==="regenerate_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {data:sub,error:subError}=await supabase.from("study_subtopics").select("id,title,content,topic_id").eq("id",subtopicId).single(); if(subError||!sub)throw new Error("Subtopic not found."); const {data:topic}=await supabase.from("study_topics").select("id,title,subject_id").eq("id",sub.topic_id).single(); if(!topic)throw new Error("Parent topic not found."); const {data:subject}=await supabase.from("study_subjects").select("subject_name,stage,paper").eq("id",topic.subject_id).single(); if(!subject)throw new Error("Subject not found."); const {data:source}=await supabase.from("study_sources").select("storage_path,file_name").eq("subject_id",topic.subject_id).eq("source_type","master_pdf").order("created_at",{ascending:true}).limit(1).maybeSingle(); if(!source?.storage_path)throw new Error("Master source not found."); const {data:signed}=await supabase.storage.from("study-sources").createSignedUrl(source.storage_path,3600); if(!signed?.signedUrl)throw new Error("Could not access Master PDF."); const sourceResponse=await fetch(signed.signedUrl); if(!sourceResponse.ok)throw new Error("Could not download Master PDF."); const prompt="Regenerate only the subtopic \""+sub.title+"\" within the topic \""+topic.title+"\" for MPSC "+subject.stage+", "+subject.paper+". Use the Master PDF as the primary source. Produce detailed, exam-oriented notes, preserving source-supported facts, dates, events, personalities, concepts, examples, tables and terminology. Do not invent facts. Return ONLY JSON: {\"title\":\"...\",\"content\":\"detailed notes...\"} Existing content: "+sub.content; const parsed=await geminiForSource(await sourceResponse.blob(),prompt,source.file_name,"application/pdf",key); const title=String(parsed.title||sub.title); const content=String(parsed.content||""); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
+  if(mode==="regenerate_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {data:sub,error:subError}=await supabase.from("study_subtopics").select("id,title,content,topic_id").eq("id",subtopicId).single(); if(subError||!sub)throw new Error("Subtopic not found."); const {data:topic}=await supabase.from("study_topics").select("id,title,subject_id").eq("id",sub.topic_id).single(); if(!topic)throw new Error("Parent topic not found."); const {data:subject}=await supabase.from("study_subjects").select("subject_name,stage,paper").eq("id",topic.subject_id).single(); if(!subject)throw new Error("Subject not found."); const {data:source}=await supabase.from("study_sources").select("storage_path,file_name").eq("subject_id",topic.subject_id).eq("source_type","master_pdf").order("created_at",{ascending:true}).limit(1).maybeSingle(); if(!source?.storage_path)throw new Error("Master source not found."); const {data:signed}=await supabase.storage.from("study-sources").createSignedUrl(source.storage_path,3600); if(!signed?.signedUrl)throw new Error("Could not access Master PDF."); const sourceResponse=await fetch(signed.signedUrl); if(!sourceResponse.ok)throw new Error("Could not download Master PDF."); const prompt="Regenerate only the subtopic \""+sub.title+"\" within the topic \""+topic.title+"\" for MPSC "+subject.stage+", "+subject.paper+". Use the Master PDF as the primary source. Produce detailed, exam-oriented notes, preserving source-supported facts, dates, events, personalities, concepts, examples, tables and terminology. Do not invent facts. Return ONLY JSON: {\"title\":\"...\",\"content\":\"detailed notes...\"} Existing content: "+sub.content; const parsed=await geminiForSource(await sourceResponse.blob(),prompt,source.file_name,"application/pdf",key); const title=String(parsed.title||sub.title); const content=String(parsed.content||""); const content_blocks=cleanContentBlocks(parsed.content_blocks); const {error:updateError}=await supabase.from("study_subtopics").update({title,content,content_blocks,updated_at:new Date().toISOString()}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
   if(mode==="add_subtopic"){
    const topicId=String(form.get("topicId")||"");const title=String(form.get("title")||"").trim();const content=String(form.get("notes")||"");
    if(!topicId||!title)return NextResponse.json({error:"Topic and subtopic title are required."},{status:400});
    const {data:maxRow}=await supabase.from("study_subtopics").select("sort_order").eq("topic_id",topicId).order("sort_order",{ascending:false}).limit(1).maybeSingle();
-   const {data:subtopic,error}=await supabase.from("study_subtopics").insert({topic_id:topicId,title,content,sort_order:(maxRow?.sort_order||0)+1}).select("id,title,content,sort_order").single();
+   const {data:subtopic,error}=await supabase.from("study_subtopics").insert({topic_id:topicId,title,content,content_blocks:[],sort_order:(maxRow?.sort_order||0)+1}).select("id,title,content,content_blocks,sort_order").single();
    if(error||!subtopic)throw new Error(error?.message||"Could not add subtopic.");
    await saveImportantKeywords(supabase,ai,topicId,[subtopic]);
    return NextResponse.json({ok:true,subtopic});
@@ -75,7 +90,7 @@ export async function POST(request:Request){
    if(!["draft","published"].includes(status))return NextResponse.json({error:"Invalid topic status."},{status:400});
    const {data:topic,error:topicError}=await supabase.from("study_topics").select("id,subject_id").eq("id",topicId).single();
    if(topicError||!topic)return NextResponse.json({error:"Topic not found."},{status:404});
-   const {data:subs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
+   const {data:subs}=await supabase.from("study_subtopics").select("id,title,content,content_blocks,sort_order").eq("topic_id",topicId).order("sort_order");
    if(status==="published" && subs?.length) await saveImportantKeywords(supabase,ai,topicId,subs);
    const {error:updateError}=await supabase.from("study_topics").update({status,updated_at:new Date().toISOString()}).eq("id",topicId);
    if(updateError)throw new Error(updateError.message);
@@ -94,7 +109,7 @@ export async function POST(request:Request){
    const {error:deleteError}=await supabase.from("study_subtopics").delete().eq("topic_id",topicId);
    if(deleteError)throw new Error(deleteError.message);
    if(Array.isArray(subtopics)&&subtopics.length){
-    const rows=subtopics.map((s:any,i:number)=>({topic_id:topicId,title:String(s?.title||`Subtopic ${i+1}`),content:String(s?.content||""),sort_order:i+1}));
+    const rows=subtopics.map((s:any,i:number)=>({topic_id:topicId,title:String(s?.title||`Subtopic ${i+1}`),content:String(s?.content||""),content_blocks:cleanContentBlocks(s?.content_blocks),sort_order:i+1}));
     const {error:insertError}=await supabase.from("study_subtopics").insert(rows);
     if(insertError)throw new Error(insertError.message);
    }
@@ -121,20 +136,15 @@ export async function POST(request:Request){
    const {data:signed,error:signedError}=await supabase.storage.from("study-sources").createSignedUrl(source.storage_path,3600);
    if(signedError||!signed?.signedUrl)throw new Error("Could not access the Master PDF.");
    const sourceResponse=await fetch(signed.signedUrl);if(!sourceResponse.ok)throw new Error("Could not download the Master PDF.");
-   const prompt=`Regenerate the complete MPSC study notes for the existing topic "${topic.title}" in subject "${subject.subject_name}" (${subject.stage}, ${subject.paper}).
-Use the uploaded Master PDF as the primary source. Produce substantially detailed, exam-oriented notes, not a short summary. Preserve the source's important facts, rulers, dates, events, concepts, examples, tables/timelines and terminology relevant to this topic. Organize the content with clear headings and subheadings. Include Prelims-focused facts and Mains-oriented analytical points where supported by the source. Do not invent facts.
-Return ONLY valid JSON:
-{"title":"${topic.title}","notes":"overview...","subtopics":[{"title":"...","content":"detailed notes for this subtopic..."}]}
-Existing notes:
-${topic.notes}`;
+   const prompt=`Regenerate the complete MPSC study notes for the existing topic "${topic.title}" in subject "${subject.subject_name}" (${subject.stage}, ${subject.paper}).\nUse the uploaded Master PDF as the primary source. Produce substantially detailed, exam-oriented notes and preserve source-supported facts. Return semantic content_blocks using heading, subheading, paragraph, bullet, numbered, callout, and table. Do not treat every dash as a heading. A named ruler/person/dynasty/event section such as "Babur (1526–1530 CE):" introducing explanation should normally be a subheading. Return ONLY valid JSON:\n{"title":"${topic.title}","notes":"plain text overview fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}],"subtopics":[{"title":"...","content":"plain text fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}]}]}\nExisting notes:\n${topic.notes}`;
    const parsed=await geminiForSource(await sourceResponse.blob(),prompt,source.file_name,"application/pdf",key);
-   const updatedNotes=String(parsed.notes||"");const updatedTitle=String(parsed.title||topic.title);
-   const {error:updateError}=await supabase.from("study_topics").update({title:updatedTitle,notes:updatedNotes,updated_at:new Date().toISOString()}).eq("id",topicId);
+   const updatedNotes=String(parsed.notes||"");const updatedTitle=String(parsed.title||topic.title);const topicBlocks=cleanContentBlocks(parsed.content_blocks);
+   const {error:updateError}=await supabase.from("study_topics").update({title:updatedTitle,notes:updatedNotes,content_blocks:topicBlocks,updated_at:new Date().toISOString()}).eq("id",topicId);
    if(updateError)throw new Error(updateError.message);
    await supabase.from("study_subtopics").delete().eq("topic_id",topicId);
    const subs=Array.isArray(parsed.subtopics)?parsed.subtopics:[];
    if(subs.length){
-    const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,i:number)=>({topic_id:topicId,title:String(typeof s==="string"?s:s.title||`Subtopic ${i+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:i+1})));
+    const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,i:number)=>({topic_id:topicId,title:String(typeof s==="string"?s:s.title||`Subtopic ${i+1}`),content:String(typeof s==="string"?"":s.content||""),content_blocks:cleanContentBlocks(typeof s==="string"?[]:s.content_blocks),sort_order:i+1})));
     if(subError)throw new Error(subError.message);
     const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
     await saveImportantKeywords(supabase,ai,topicId,savedSubs||[]);
@@ -150,10 +160,7 @@ ${topic.notes}`;
   if(signedError||!signed?.signedUrl)throw new Error("Could not access uploaded source.");
   const sourceResponse=await fetch(signed.signedUrl);if(!sourceResponse.ok)throw new Error("Could not download uploaded source.");
   const sourceBlob=await sourceResponse.blob();if(sourceBlob.size>50*1024*1024)throw new Error("The source PDF is larger than Gemini's 50 MB limit.");
-  const prompt=`Build comprehensive MPSC ${stage} notes for the subject "${subject}" (${paper}).
-Treat the uploaded master source as the primary source. Do not merely summarize it. Extract and organize the complete subject into logical topics and detailed subtopics. For each topic create substantial, exam-oriented notes preserving important facts, dates, personalities, events, definitions, examples, constitutional/legal provisions where present, Maharashtra-relevant points where present, Prelims facts, Mains analytical points, comparisons, timelines and tables supported by the source. Aim for comprehensive coverage of the source rather than a short overview. Do not invent facts or citations.
-Return ONLY valid JSON:
-{"topics":[{"title":"...","notes":"topic overview and synthesis...","subtopics":[{"title":"...","content":"detailed notes for this subtopic..."}]}],"study_plan":["..."]}`;
+  const prompt=`Build comprehensive MPSC ${stage} notes for the subject "${subject}" (${paper}).\nTreat the uploaded master source as the primary source. Do not merely summarize it. Extract and organize the complete subject into logical topics and detailed subtopics. For each topic create substantial, exam-oriented notes preserving important facts, dates, personalities, events, definitions, examples, constitutional/legal provisions where present, Maharashtra-relevant points where present, Prelims facts, Mains analytical points, comparisons, timelines and tables supported by the source. Aim for comprehensive coverage of the source rather than a short overview. Do not invent facts or citations.\nThe most important requirement is semantic structure. Return content_blocks for every topic and subtopic. Allowed block types are heading, subheading, paragraph, bullet, numbered, callout, and table. Use heading for major sections, subheading for named people/rulers/dynasties/events or meaningful subsections, paragraph for explanatory prose, bullet/numbered only for genuine lists, callout for important exam facts, and table only where the source supports a useful table or comparison. Do not use a dash as a proxy for heading. For example, "Babur (1526–1530 CE):" introducing his explanation should be a subheading, while a list item such as "Causes of decline" should remain a bullet if it is genuinely a list item.\nReturn ONLY valid JSON:\n{"topics":[{"title":"...","notes":"plain text overview fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}],"subtopics":[{"title":"...","content":"plain text fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}]}]}],"study_plan":["..."]}`;
   const parsed=await geminiForSource(sourceBlob,prompt,sourceName,sourceMime,key);
   const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(parsed.subject_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
   if(subjectError||!subjectRow)throw new Error(subjectError?.message||"Could not save generated subject.");
@@ -162,15 +169,15 @@ Return ONLY valid JSON:
   const topics=Array.isArray(parsed.topics)?parsed.topics:[];
   let savedTopics:any[]=[];
   if(topics.length){
-   const {data:rows,error:topicError}=await supabase.from("study_topics").insert(topics.map((t:any,i:number)=>({subject_id:subjectRow.id,title:String(t.title||`Topic ${i+1}`),sort_order:i+1,notes:String(t.notes||""),status:"draft"}))).select("id,title,notes");
+   const {data:rows,error:topicError}=await supabase.from("study_topics").insert(topics.map((t:any,i:number)=>({subject_id:subjectRow.id,title:String(t.title||`Topic ${i+1}`),sort_order:i+1,notes:String(t.notes||""),content_blocks:cleanContentBlocks(t.content_blocks),status:"draft"}))).select("id,title,notes");
    if(topicError)throw new Error(topicError.message);
    for(let i=0;i<(rows||[]).length;i++){
     const row:any=(rows||[])[i], sourceTopic:any=topics[i];
     const subs=Array.isArray(sourceTopic?.subtopics)?sourceTopic.subtopics:[];
     if(subs.length){
-      const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,j:number)=>({topic_id:row.id,title:String(typeof s==="string"?s:s.title||`Subtopic ${j+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:j+1})));
+      const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,j:number)=>({topic_id:row.id,title:String(typeof s==="string"?s:s.title||`Subtopic ${j+1}`),content:String(typeof s==="string"?"":s.content||""),content_blocks:cleanContentBlocks(typeof s==="string"?[]:s.content_blocks),sort_order:j+1})));
       if(subError)throw new Error(subError.message);
-      const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",row.id).order("sort_order");
+      const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,content_blocks,sort_order").eq("topic_id",row.id).order("sort_order");
       await saveImportantKeywords(supabase,ai,row.id,savedSubs||[]);
     }
   }
