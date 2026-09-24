@@ -23,6 +23,7 @@ export default function AIStudyNotes(){
  const [adding,setAdding]=useState(false);
  const [newTitle,setNewTitle]=useState("");
  const [newNotes,setNewNotes]=useState("");
+ const [editSubtopics,setEditSubtopics]=useState<Subtopic[]>([]);
 
  async function generate(){
   setError("");setMessage("");
@@ -50,20 +51,19 @@ export default function AIStudyNotes(){
   finally{setUploading(false);setLoading(false);}
  }
 
- function openTopic(t:Topic){setSelected(t);setEditing(false);setEditNotes(t.notes);setError("");setMessage("");}
+ function openTopic(t:Topic){setSelected(t);setEditing(false);setEditNotes(t.notes);setEditSubtopics((t.subtopics||[]).map(s=>({...s})));setError("");setMessage("");}
 
  async function saveTopic(){
   if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
   setLoading(true);setError("");setMessage("");
   try{
-   const form=new FormData();form.append("mode","save_topic");form.append("topicId",selected.id);form.append("notes",editNotes);
+   const form=new FormData();form.append("mode","save_complete_topic");form.append("topicId",selected.id);form.append("notes",editNotes);form.append("subtopics",JSON.stringify(editSubtopics.map((s,i)=>({title:s.title,content:s.content,sort_order:i+1}))));
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
-   const data=await res.json();if(!res.ok) throw new Error(data.error||"Could not save topic.");
-   const updated={...selected,notes:editNotes};
-   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditing(false);setMessage("Topic saved successfully.");
-  }catch(e:any){setError(e?.message||"Could not save topic.");}finally{setLoading(false);}
+   const data=await res.json();if(!res.ok) throw new Error(data.error||"Could not save complete topic.");
+   const updated={...selected,notes:editNotes,subtopics:editSubtopics.map((s,i)=>({...s,sort_order:i+1}))};
+   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditing(false);setMessage("Complete topic saved successfully.");
+  }catch(e:any){setError(e?.message||"Could not save complete topic.");}finally{setLoading(false);}
  }
-
  async function regenerate(){
   if(!selected?.id){setError("This topic has no saved ID. Generate the subject again.");return;}
   setLoading(true);setError("");setMessage("");
@@ -73,7 +73,7 @@ export default function AIStudyNotes(){
    const data=await res.json();if(!res.ok) throw new Error(data.error||"Regeneration failed.");
    const regenerated=data.result as Topic;
    const updated={...selected,...regenerated,id:selected.id};
-   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditNotes(updated.notes);setEditing(false);setMessage("Topic regenerated and saved.");
+   setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditNotes(updated.notes);setEditSubtopics((updated.subtopics||[]).map(s=>({...s})));setEditing(false);setMessage("Topic regenerated and saved.");
   }catch(e:any){setError(e?.message||"Regeneration failed.");}finally{setLoading(false);}
  }
 
@@ -91,11 +91,12 @@ export default function AIStudyNotes(){
    <section className="card"><h2>2. Upload Master PDF</h2><p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}</section>
    <section className="card"><h2>3. Generate</h2><p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p><button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ PROCESSING…"):"✨ GENERATE COMPLETE SUBJECT"}</button>{loading&&<p className="muted" style={{marginTop:10}}>Please keep this page open while Gemini processes the source.</p>}</section>
    {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>openTopic(t)}>VIEW / EDIT</button></div>)}</div></section>}
-   {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review the complete topic notes. Edit or regenerate the entire topic as one unit.</p>
-    {editing?<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:14,minHeight:520,resize:"vertical",lineHeight:1.65}}/>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{selected.notes}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{s.content}</div></article>)}</div>:null}</div>}
-    <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
-     {!editing?<><button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);}}>✏️ EDIT COMPLETE NOTES</button><button className="btn outline" onClick={regenerate} disabled={loading}>✨ AI REGENERATE</button></>:<><button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE CHANGES</button><button className="btn secondary" onClick={()=>{setEditing(false);setEditNotes(selected.notes);}}>CANCEL</button></>}
-    </div>
+   {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review and edit the complete topic. All subtopics are included in the same edit session.</p>
+    {editing?<div style={{marginTop:14}}>
+      <label>Topic Overview<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:8,minHeight:260,resize:"vertical",lineHeight:1.65}}/></label>
+      {editSubtopics.length>0&&<div style={{marginTop:22}}><h3>Complete Notes — Subtopics</h3>{editSubtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><label><strong>Subtopic {i+1}</strong><input className="input" value={s.title} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,title:e.target.value}:x))} style={{marginTop:8}}/></label><label style={{display:"block",marginTop:12}}>Content<textarea className="input" value={s.content} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,content:e.target.value}:x))} style={{marginTop:8,minHeight:360,resize:"vertical",lineHeight:1.65}}/></label></article>)}</div>}
+    </div>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{selected.notes}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{s.content}</div></article>)}</div>:null}</div>}
+    <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>{!editing?<><button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>✏️ EDIT COMPLETE NOTES</button><button className="btn outline" onClick={regenerate} disabled={loading}>✨ AI REGENERATE</button></>:<><button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE COMPLETE TOPIC</button><button className="btn secondary" onClick={()=>{setEditing(false);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>CANCEL</button></>}</div>
    </section>}
   </main>
   <nav className="bottomNav"><a href="/teacher">⌂<span>Home</span></a><a href="/teacher/ai-study-notes">▣<span>AI Notes</span></a><a href="/teacher">◉<span>Tests</span></a><a href="/teacher">•••<span>More</span></a></nav>
