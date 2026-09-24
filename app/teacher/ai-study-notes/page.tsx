@@ -23,9 +23,6 @@ export default function AIStudyNotes(){
  const [adding,setAdding]=useState(false);
  const [newTitle,setNewTitle]=useState("");
  const [newNotes,setNewNotes]=useState("");
- const [selectedSubtopic,setSelectedSubtopic]=useState<Subtopic|null>(null);
- const [subtopicEditing,setSubtopicEditing]=useState(false);
- const [subtopicNotes,setSubtopicNotes]=useState("");
 
  async function generate(){
   setError("");setMessage("");
@@ -106,12 +103,12 @@ export default function AIStudyNotes(){
    <section className="card"><h2>2. Upload Master PDF</h2><p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}</section>
    <section className="card"><h2>3. Generate</h2><p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p><button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ PROCESSING…"):"✨ GENERATE COMPLETE SUBJECT"}</button>{loading&&<p className="muted" style={{marginTop:10}}>Please keep this page open while Gemini processes the source.</p>}</section>
    {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong></div><button className="btn outline small" onClick={()=>openTopic(t)}>VIEW / EDIT</button></div>)}</div></section>}
-   {selectedSubtopic&&subtopicEditing&&<section className="card"><h2>✏️ Edit Subtopic</h2><input className="input" value={selectedSubtopic.title} onChange={e=>setSelectedSubtopic({...selectedSubtopic,title:e.target.value})}/><textarea className="input" value={subtopicNotes} onChange={e=>setSubtopicNotes(e.target.value)} style={{marginTop:12,minHeight:360,resize:"vertical",lineHeight:1.6}}/><div style={{display:"flex",gap:8,marginTop:12}}><button className="btn primary" onClick={saveSubtopic} disabled={loading}>💾 SAVE SUBTOPIC</button><button className="btn secondary" onClick={()=>setSubtopicEditing(false)}>CANCEL</button></div></section>}{selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review the complete topic notes. Edit or regenerate the entire topic as one unit.</p>
+   {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review the complete topic notes. Edit or regenerate the entire topic as one unit.</p>
     {editing?<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:14,minHeight:520,resize:"vertical",lineHeight:1.65}}/>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{selected.notes}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{s.content}</div></article>)}</div>:null}</div>}
     <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
      {!editing?<><button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);}}>✏️ EDIT COMPLETE NOTES</button><button className="btn outline" onClick={regenerate} disabled={loading}>✨ AI REGENERATE</button></>:<><button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE CHANGES</button><button className="btn secondary" onClick={()=>{setEditing(false);setEditNotes(selected.notes);}}>CANCEL</button></>}
     </div>
-   </section>}}
+   </section>}
   </main>
   <nav className="bottomNav"><a href="/teacher">⌂<span>Home</span></a><a href="/teacher/ai-study-notes">▣<span>AI Notes</span></a><a href="/teacher">◉<span>Tests</span></a><a href="/teacher">•••<span>More</span></a></nav>
  </div>;
