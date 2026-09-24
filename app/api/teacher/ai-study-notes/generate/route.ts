@@ -38,6 +38,17 @@ export async function POST(request:Request){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
    const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
   }
+  if(mode==="set_topic_status"){
+   const topicId=String(form.get("topicId")||"");
+   const status=String(form.get("status")||"draft");
+   if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   if(!["draft","published"].includes(status))return NextResponse.json({error:"Invalid topic status."},{status:400});
+   const {data:topic,error:topicError}=await supabase.from("study_topics").select("id,subject_id").eq("id",topicId).single();
+   if(topicError||!topic)return NextResponse.json({error:"Topic not found."},{status:404});
+   const {error:updateError}=await supabase.from("study_topics").update({status,updated_at:new Date().toISOString()}).eq("id",topicId);
+   if(updateError)throw new Error(updateError.message);
+   return NextResponse.json({ok:true,status});
+  }
   if(mode==="save_complete_topic"){
    const topicId=String(form.get("topicId")||"");
    const notes=String(form.get("notes")||"");
