@@ -6,6 +6,22 @@ import {createClient} from "@/lib/supabase/client";
 type Subtopic={id?:string;title:string;content:string;sort_order?:number};
 type Topic={id?:string;title:string;notes:string;subtopics?:Subtopic[];subject_id?:string;status?:string};
 
+function renderNoteText(text:string){
+ const lines=text.split("\n");
+ return lines.map((line,i)=>{
+  const key="line-"+i;
+  const match=line.match(/^(\s*[-•]\s+)([^:—–-]{1,80})([:—–-])\s*(.*)$/);
+  if(match){
+   return <div key={key}><span>{match[1]}</span><strong>{match[2].trim()}{match[3]}</strong>{match[4]?" "+match[4]:""}</div>;
+  }
+  const heading=line.match(/^\s*[-•]\s+(.{1,80})\s*$/);
+  if(heading && heading[1].trim().split(/\s+/).length<=8){
+   return <div key={key}><strong>{line}</strong></div>;
+  }
+  return <div key={key}>{line}</div>;
+ });
+}
+
 export default function AIStudyNotes(){
  const [subject,setSubject]=useState("");
  const [stage,setStage]=useState("Mains");
@@ -106,7 +122,7 @@ export default function AIStudyNotes(){
     {editing?<div style={{marginTop:14}}>
       <label>Topic Overview<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:8,minHeight:260,resize:"vertical",lineHeight:1.65}}/></label>
       {editSubtopics.length>0&&<div style={{marginTop:22}}><h3>Complete Notes — Subtopics</h3>{editSubtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><label><strong>Subtopic {i+1}</strong><input className="input" value={s.title} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,title:e.target.value}:x))} style={{marginTop:8}}/></label><label style={{display:"block",marginTop:12}}>Content<textarea className="input" value={s.content} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,content:e.target.value}:x))} style={{marginTop:8,minHeight:360,resize:"vertical",lineHeight:1.65}}/></label></article>)}</div>}
-    </div>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{selected.notes}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{s.content}</div></article>)}</div>:null}</div>}
+    </div>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{renderNoteText(selected.notes)}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{renderNoteText(s.content)}</div></article>)}</div>:null}</div>}
     <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>{!editing?<><button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>✏️ EDIT COMPLETE NOTES</button><button className="btn outline" onClick={refreshKeywords} disabled={loading}>🔑 REFRESH KEYWORDS</button><button className="btn outline" onClick={regenerate} disabled={loading}>✨ AI REGENERATE</button><button className="btn primary" onClick={async()=>{setLoading(true);setError("");setMessage("");try{const form=new FormData();form.append("mode","set_topic_status");form.append("topicId",selected.id||"");form.append("status",selected.status==="published"?"draft":"published");const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not update publication status.");const updated={...selected,status:selected.status==="published"?"draft":"published"};setSelected(updated);setTopics(prev=>prev.map(t=>t.id===updated.id?updated:t));setMessage(updated.status==="published"?"Topic published to students.":"Topic unpublished.");}catch(e:any){setError(e?.message||"Could not update publication status.");}finally{setLoading(false);}}} disabled={loading}>{selected.status==="published"?"⏸ UNPUBLISH":"🌐 PUBLISH"}</button></>:<><button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE COMPLETE TOPIC</button><button className="btn secondary" onClick={()=>{setEditing(false);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>CANCEL</button></>}</div>
    </section>}
   </main>
