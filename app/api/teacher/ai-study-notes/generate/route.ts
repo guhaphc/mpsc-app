@@ -41,7 +41,7 @@ export async function POST(request:Request){
   const key=process.env.GEMINI_API_KEY;if(!key)return NextResponse.json({error:"AI service is not configured yet."},{status:503});
   const ai=new GoogleGenAI({apiKey:key});
   const form=await request.formData();const mode=String(form.get("mode")||"complete_subject");
-  if(mode==="save_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); const title=String(form.get("title")||"").trim(); const content=String(form.get("content")||""); if(!subtopicId||!title)return NextResponse.json({error:"Subtopic details are required."},{status:400}); const {data:sub,error}=await supabase.from("study_subtopics").select("id").eq("id",subtopicId).single(); if(error||!sub)return NextResponse.json({error:"Subtopic not found."},{status:404}); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
+  if(mode==="save_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); const title=String(form.get("title")||"").trim(); const content=String(form.get("content")||""); if(!subtopicId||!title)return NextResponse.json({error:"Subtopic details are required."},{status:400}); const {data:sub,error}=await supabase.from("study_subtopics").select("id").eq("id",subtopicId).single(); if(error||!sub)return NextResponse.json({error:"Subtopic not found."},{status:404}); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); const {data:parent}=await supabase.from("study_subtopics").select("topic_id,sort_order").eq("id",subtopicId).single(); if(parent) await saveImportantKeywords(supabase,ai,parent.topic_id,[{title,content,sort_order:parent.sort_order}]); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
   if(mode==="delete_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {error}=await supabase.from("study_subtopics").delete().eq("id",subtopicId); if(error)throw new Error(error.message); return NextResponse.json({ok:true}); }
   if(mode==="regenerate_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {data:sub,error:subError}=await supabase.from("study_subtopics").select("id,title,content,topic_id").eq("id",subtopicId).single(); if(subError||!sub)throw new Error("Subtopic not found."); const {data:topic}=await supabase.from("study_topics").select("id,title,subject_id").eq("id",sub.topic_id).single(); if(!topic)throw new Error("Parent topic not found."); const {data:subject}=await supabase.from("study_subjects").select("subject_name,stage,paper").eq("id",topic.subject_id).single(); if(!subject)throw new Error("Subject not found."); const {data:source}=await supabase.from("study_sources").select("storage_path,file_name").eq("subject_id",topic.subject_id).eq("source_type","master_pdf").order("created_at",{ascending:true}).limit(1).maybeSingle(); if(!source?.storage_path)throw new Error("Master source not found."); const {data:signed}=await supabase.storage.from("study-sources").createSignedUrl(source.storage_path,3600); if(!signed?.signedUrl)throw new Error("Could not access Master PDF."); const sourceResponse=await fetch(signed.signedUrl); if(!sourceResponse.ok)throw new Error("Could not download Master PDF."); const prompt="Regenerate only the subtopic \""+sub.title+"\" within the topic \""+topic.title+"\" for MPSC "+subject.stage+", "+subject.paper+". Use the Master PDF as the primary source. Produce detailed, exam-oriented notes, preserving source-supported facts, dates, events, personalities, concepts, examples, tables and terminology. Do not invent facts. Return ONLY JSON: {\"title\":\"...\",\"content\":\"detailed notes...\"} Existing content: "+sub.content; const parsed=await geminiForSource(await sourceResponse.blob(),prompt,source.file_name,"application/pdf",key); const title=String(parsed.title||sub.title); const content=String(parsed.content||""); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
   if(mode==="add_subtopic"){
@@ -49,7 +49,9 @@ export async function POST(request:Request){
    if(!topicId||!title)return NextResponse.json({error:"Topic and subtopic title are required."},{status:400});
    const {data:maxRow}=await supabase.from("study_subtopics").select("sort_order").eq("topic_id",topicId).order("sort_order",{ascending:false}).limit(1).maybeSingle();
    const {data:subtopic,error}=await supabase.from("study_subtopics").insert({topic_id:topicId,title,content,sort_order:(maxRow?.sort_order||0)+1}).select("id,title,content,sort_order").single();
-   if(error||!subtopic)throw new Error(error?.message||"Could not add subtopic.");return NextResponse.json({ok:true,subtopic});
+   if(error||!subtopic)throw new Error(error?.message||"Could not add subtopic.");
+   await saveImportantKeywords(supabase,ai,topicId,[subtopic]);
+   return NextResponse.json({ok:true,subtopic});
   }
   if(mode==="delete_topic"){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
@@ -62,6 +64,8 @@ export async function POST(request:Request){
    if(!["draft","published"].includes(status))return NextResponse.json({error:"Invalid topic status."},{status:400});
    const {data:topic,error:topicError}=await supabase.from("study_topics").select("id,subject_id").eq("id",topicId).single();
    if(topicError||!topic)return NextResponse.json({error:"Topic not found."},{status:404});
+   const {data:subs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
+   if(status==="published" && subs?.length) await saveImportantKeywords(supabase,ai,topicId,subs);
    const {error:updateError}=await supabase.from("study_topics").update({status,updated_at:new Date().toISOString()}).eq("id",topicId);
    if(updateError)throw new Error(updateError.message);
    return NextResponse.json({ok:true,status});
@@ -155,6 +159,8 @@ Return ONLY valid JSON:
     if(subs.length){
       const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,j:number)=>({topic_id:row.id,title:String(typeof s==="string"?s:s.title||`Subtopic ${j+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:j+1})));
       if(subError)throw new Error(subError.message);
+      const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",row.id).order("sort_order");
+      await saveImportantKeywords(supabase,ai,row.id,savedSubs||[]);
     }
   }
   savedTopics=(rows||[]).map((r:any,i:number)=>({...topics[i],id:r.id,title:r.title,notes:r.notes}));
