@@ -10,16 +10,23 @@ function renderNoteText(text:string){
  const lines=text.split("\n");
  return lines.map((line,i)=>{
   const key="line-"+i;
-  const match=line.match(/^(\s*[-•]\s+)([^:—–-]{1,80})([:—–-])\s*(.*)$/);
-  if(match){
-   return <div key={key}><span>{match[1]}</span><strong>{match[2].trim()}{match[3]}</strong>{match[4]?" "+match[4]:""}</div>;
-  }
-  const heading=line.match(/^\s*[-•]\s+(.{1,80})\s*$/);
-  if(heading && heading[1].trim().split(/\s+/).length<=8){
-   return <div key={key}><strong>{line}</strong></div>;
+  const trimmed=line.trim();
+  const isBullet=trimmed.startsWith("- ")||trimmed.startsWith("• ");
+  if(isBullet){
+   const bulletPrefix=line.slice(0,line.indexOf(trimmed))+trimmed.slice(0,2);
+   const body=trimmed.slice(2);
+   const colon=body.indexOf(":");
+   if(colon>0&&colon<=80){
+    const label=body.slice(0,colon).trim();
+    const value=body.slice(colon+1).trim();
+    return <div key={key}><span>{bulletPrefix}</span><strong>{label}:</strong>{value?" "+value:""}</div>;
+   }
+   if(body.split(/\s+/).length<=8){
+    return <div key={key}><strong>{line}</strong></div>;
+   }
   }
   return <div key={key}>{line}</div>;
- });
+ }); 
 }
 
 export default function AIStudyNotes(){
