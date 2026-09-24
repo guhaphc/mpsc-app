@@ -1,12 +1,13 @@
 // Note label formatting: structured bullet labels are rendered in bold.
 "use client";
 
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {createClient} from "@/lib/supabase/client";
 
 type ContentBlock={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table";text?:string;items?:string[];columns?:string[];rows?:string[][]};
 type Subtopic={id?:string;title:string;content:string;content_blocks?:ContentBlock[];sort_order?:number};
-type Topic={id?:string;title:string;notes:string;content_blocks?:ContentBlock[];subtopics?:Subtopic[];subject_id?:string;status?:string};
+type Topic={id?:string;title:string;notes:string;content_blocks?:ContentBlock[];subtopics?:Subtopic[];subject_id?:string;status?:string;sort_order?:number};
+type SavedSubject={id:string;subject_name:string;stage:string;paper:string;status?:string;created_at?:string;topics:Topic[]};
 
 function renderStructuredBlocks(blocks:ContentBlock[]|undefined, fallback:string){
  if(!Array.isArray(blocks)||!blocks.length) return renderNoteText(fallback);
@@ -63,6 +64,55 @@ export default function AIStudyNotes(){
  const [newTitle,setNewTitle]=useState("");
  const [newNotes,setNewNotes]=useState("");
  const [editSubtopics,setEditSubtopics]=useState<Subtopic[]>([]);
+ const [savedSubjects,setSavedSubjects]=useState<SavedSubject[]>([]);
+ const [libraryLoading,setLibraryLoading]=useState(true);
+
+ async function loadSavedSubjects(){
+  setLibraryLoading(true);
+  try{
+   const supabase=createClient();
+   const {data:{user}}=await supabase.auth.getUser();
+   if(!user){setSavedSubjects([]);return;}
+   const {data:subjects,error:subjectError}=await supabase.from("study_subjects").select("id,subject_name,stage,paper,status,created_at").eq("created_by",user.id).order("created_at",{ascending:false});
+   if(subjectError)throw subjectError;
+   const ids=(subjects||[]).map((s:any)=>s.id);
+   if(!ids.length){setSavedSubjects([]);return;}
+   const {data:topicRows,error:topicError}=await supabase.from("study_topics").select("id,subject_id,title,notes,content_blocks,status,sort_order").in("subject_id",ids).order("sort_order",{ascending:true});
+   if(topicError)throw topicError;
+   const topicIds=(topicRows||[]).map((t:any)=>t.id);
+   let subRows:any[]=[];
+   if(topicIds.length){
+    const {data,error}=await supabase.from("study_subtopics").select("id,topic_id,title,content,content_blocks,sort_order,important_keywords").in("topic_id",topicIds).order("sort_order",{ascending:true});
+    if(error)throw error;
+    subRows=data||[];
+   }
+   const subsByTopic=new Map<string,any[]>();
+   for(const s of subRows){const list=subsByTopic.get(s.topic_id)||[];list.push(s);subsByTopic.set(s.topic_id,list);}
+   const topicsBySubject=new Map<string,Topic[]>();
+   for(const t of topicRows||[]){
+    const topic:Topic={...t,subtopics:subsByTopic.get(t.id)||[]};
+    const list=topicsBySubject.get(t.subject_id)||[];list.push(topic);topicsBySubject.set(t.subject_id,list);
+   }
+   setSavedSubjects((subjects||[]).map((s:any)=>({...s,topics:topicsBySubject.get(s.id)||[]})));
+  }catch(e:any){
+   setError(e?.message||"Could not load previously generated subjects.");
+  }finally{setLibraryLoading(false);}
+ }
+
+ useEffect(()=>{loadSavedSubjects();},[]);
+
+ function openSavedSubject(s:SavedSubject){
+  setSubject(s.subject_name);
+  setStage(s.stage||"Mains");
+  setPaper(s.paper||"GS Paper II");
+  setGeneratedSubject(s.subject_name);
+  setTopics(s.topics||[]);
+  setSelected(null);
+  setFile(null);
+  setError("");
+  setMessage(`Loaded saved subject: ${s.subject_name}`);
+  window.scrollTo({top:0,behavior:"smooth"});
+ }
 
  async function generate(){
   setError("");setMessage("");
@@ -84,7 +134,7 @@ export default function AIStudyNotes(){
    form.append("mode","complete_subject");form.append("sourcePath",path);form.append("sourceName",file.name);form.append("sourceMime",file.type||"application/pdf");
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
    const data=await res.json();if(!res.ok) throw new Error(data.error||"Generation failed.");
-   setTopics(((data.result?.topics||[]) as Topic[]).map(t=>({...t,subject_id:data.subjectId})));setGeneratedSubject(subject.trim());setSelected(null);
+   setTopics(((data.result?.topics||[]) as Topic[]).map(t=>({...t,subject_id:data.subjectId})));setGeneratedSubject(subject.trim());setSelected(null);await loadSavedSubjects();
    setMessage("Complete subject generated and saved as a draft.");
   }catch(e:any){setError(e?.message||"Generation failed. Please try again.");}
   finally{setUploading(false);setLoading(false);}
@@ -152,6 +202,17 @@ export default function AIStudyNotes(){
    </div></section>
    <section className="card"><h2>2. Upload Master PDF</h2><p className="muted">The PDF is uploaded securely to private storage first, then processed server-side by Gemini. Maximum 50 MB.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}</section>
    <section className="card"><h2>3. Generate</h2><p className="muted">Gemini will organize topics and create comprehensive exam-oriented notes from the Master PDF. The result remains a draft until the teacher reviews and publishes it.</p><button className="btn primary" onClick={generate} disabled={loading||!subject.trim()||!file}>{loading?(uploading?"⬆️ UPLOADING SOURCE…":"✨ PROCESSING…"):"✨ GENERATE COMPLETE SUBJECT"}</button>{loading&&<p className="muted" style={{marginTop:10}}>Please keep this page open while Gemini processes the source.</p>}</section>
+   <section className="card">
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+     <div><h2 style={{marginBottom:4}}>📚 Previously Generated Subjects</h2><p className="muted" style={{margin:0}}>Your generated notes are permanently saved in Supabase and can be reopened anytime.</p></div>
+     <button className="btn secondary" onClick={loadSavedSubjects} disabled={libraryLoading}>↻ REFRESH</button>
+    </div>
+    {libraryLoading?<p className="muted" style={{marginTop:14}}>Loading your saved subjects…</p>:savedSubjects.length===0?<p className="muted" style={{marginTop:14}}>No previously generated subjects found.</p>:
+     <div className="topicList" style={{marginTop:14}}>{savedSubjects.map((s,i)=><div className="topicRow" key={s.id}>
+      <div><strong>{i+1}. {s.subject_name}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{s.stage} · {s.paper} · {s.topics.length} topics · {s.status==="published"?"● Published":"● Draft"}</div></div>
+      <button className="btn outline small" onClick={()=>openSavedSubject(s)}>OPEN SUBJECT</button>
+     </div>)}</div>}
+   </section>
    {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{t.status==="published"?"● Published":"● Draft"}</div></div><button className="btn outline small" onClick={()=>openTopic(t)}>VIEW / EDIT</button></div>)}</div></section>}
    {selected&&<section className="card"><h2>{selected.title}</h2><p className="muted">Review and edit the complete topic. All subtopics are included in the same edit session.</p><div className="muted" style={{fontWeight:700,marginTop:8}}>{selected.status==="published"?"● PUBLISHED":"● DRAFT"}</div>
     {editing?<div style={{marginTop:14}}>
