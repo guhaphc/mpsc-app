@@ -13,9 +13,10 @@ async function generateImportantKeywords(ai:any, subtopics:any[]){
 async function saveImportantKeywords(supabase:any,ai:any,topicId:string,subtopics:any[]){
  const generated=await generateImportantKeywords(ai,subtopics);
  for(let i=0;i<(Array.isArray(subtopics)?subtopics:[]).length;i++){
+  const item=subtopics[i];
   const keywords=Array.isArray(generated.find((x:any)=>Number(x.index)===i)?.keywords)?generated.find((x:any)=>Number(x.index)===i).keywords:[];
   const clean=keywords.map((k:any)=>({term:String(k?.term||"").trim(),category:String(k?.category||"Other"),importance:String(k?.importance||"high")})).filter((k:any)=>k.term);
-  await supabase.from("study_subtopics").update({important_keywords:clean,updated_at:new Date().toISOString()}).eq("topic_id",topicId).eq("sort_order",i+1);
+  await supabase.from("study_subtopics").update({important_keywords:clean,updated_at:new Date().toISOString()}).eq("topic_id",topicId).eq("sort_order",Number(item?.sort_order||i+1));
  }
 }
 
