@@ -10,7 +10,7 @@ export default async function TopicReader({params}:{params:Promise<{subjectId:st
  const {data:topic}=await supabase.from("study_topics").select("id,title,notes,sort_order").eq("id",topicId).eq("subject_id",subjectId).eq("status","published").single(); if(!topic)notFound();
  const {data:subs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
  return <div className="shell" style={{background:"var(--bg)"}}>
-  <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">READING MODE</div></div><div style={{display:"flex",gap:8}}><button className="btn secondary" title="Reading settings">Aa</button><button className="btn secondary" title="Bookmark">🔖</button></div></header>
+  <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">READING MODE</div></div></header>
   <main style={{maxWidth:820,margin:"0 auto",padding:"28px 18px 70px"}}>
    <div className="muted" style={{fontSize:12,fontWeight:700}}>{subject.subject_name} · {subject.stage} · {subject.paper}</div>
     <ReaderControls title={topic.title} notes={topic.notes} subtopics={(subs||[]).map(s=>({id:s.id,title:s.title,content:s.content}))}/>
