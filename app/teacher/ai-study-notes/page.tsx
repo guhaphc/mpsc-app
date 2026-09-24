@@ -66,6 +66,9 @@ export default function AIStudyNotes(){
  const [editSubtopics,setEditSubtopics]=useState<Subtopic[]>([]);
  const [savedSubjects,setSavedSubjects]=useState<SavedSubject[]>([]);
  const [libraryLoading,setLibraryLoading]=useState(true);
+ const [manageSubjects,setManageSubjects]=useState(false);
+ const [selectedSubjectIds,setSelectedSubjectIds]=useState<string[]>([]);
+ const [deletingSubjects,setDeletingSubjects]=useState(false);
 
  async function loadSavedSubjects(){
   setLibraryLoading(true);
@@ -205,12 +208,42 @@ export default function AIStudyNotes(){
    <section className="card">
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
      <div><h2 style={{marginBottom:4}}>📚 Previously Generated Subjects</h2><p className="muted" style={{margin:0}}>Your generated notes are permanently saved in Supabase and can be reopened anytime.</p></div>
-     <button className="btn secondary" onClick={loadSavedSubjects} disabled={libraryLoading}>↻ REFRESH</button>
+     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <button className="btn secondary" onClick={loadSavedSubjects} disabled={libraryLoading||deletingSubjects}>↻ REFRESH</button>
+      <button className={manageSubjects?"btn primary":"btn outline"} onClick={()=>{setManageSubjects(v=>!v);setSelectedSubjectIds([]);}} disabled={libraryLoading||deletingSubjects}>{manageSubjects?"DONE":"⚙️ MANAGE GENERATED SUBJECTS"}</button>
+     </div>
     </div>
+    {manageSubjects&&<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,background:"var(--soft)"}}>
+     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <strong>{selectedSubjectIds.length} selected</strong>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+       <button className="btn secondary small" onClick={()=>setSelectedSubjectIds(savedSubjects.map(s=>s.id))} disabled={!savedSubjects.length}>SELECT ALL</button>
+       <button className="btn outline small" onClick={()=>setSelectedSubjectIds([])} disabled={!selectedSubjectIds.length}>CLEAR</button>
+       <button className="btn primary small" onClick={async()=>{
+        if(!selectedSubjectIds.length)return;
+        const selectedRows=savedSubjects.filter(s=>selectedSubjectIds.includes(s.id));
+        const published=selectedRows.filter(s=>s.status==="published");
+        if(published.length){setError(`Published subjects cannot be deleted. Unpublish first: ${published.map(s=>s.subject_name).join(", ")}`);return;}
+        const names=selectedRows.map(s=>s.subject_name).join(", ");
+        if(!window.confirm(`Delete ${selectedRows.length} generated subject(s)?\\n\\n${names}\\n\\nThis permanently deletes the selected subjects, their topics, subtopics, generation records and stored Master PDFs. This cannot be undone.`))return;
+        setDeletingSubjects(true);setError("");setMessage("");
+        try{
+         const form=new FormData();form.append("mode","delete_subjects");form.append("subjectIds",JSON.stringify(selectedSubjectIds));
+         const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
+         const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not delete selected subjects.");
+         setSelectedSubjectIds([]);setManageSubjects(false);setSelected(null);setTopics([]);setGeneratedSubject("");setSubject("");setFile(null);
+         setMessage(`Deleted ${data.deleted||selectedRows.length} generated subject(s) successfully.`);
+         await loadSavedSubjects();
+        }catch(e:any){setError(e?.message||"Could not delete selected subjects.");}finally{setDeletingSubjects(false);}
+       }} disabled={!selectedSubjectIds.length||deletingSubjects}>{deletingSubjects?"🗑️ DELETING…":`🗑️ DELETE SELECTED (${selectedSubjectIds.length})`}</button>
+      </div>
+     </div>
+    </div>}
     {libraryLoading?<p className="muted" style={{marginTop:14}}>Loading your saved subjects…</p>:savedSubjects.length===0?<p className="muted" style={{marginTop:14}}>No previously generated subjects found.</p>:
      <div className="topicList" style={{marginTop:14}}>{savedSubjects.map((s,i)=><div className="topicRow" key={s.id}>
-      <div><strong>{i+1}. {s.subject_name}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{s.stage} · {s.paper} · {s.topics.length} topics · {s.status==="published"?"● Published":"● Draft"}</div></div>
-      <button className="btn outline small" onClick={()=>openSavedSubject(s)}>OPEN SUBJECT</button>
+      {manageSubjects?<input type="checkbox" checked={selectedSubjectIds.includes(s.id)} onChange={e=>setSelectedSubjectIds(prev=>e.target.checked?[...prev,s.id]:prev.filter(id=>id!==s.id))} disabled={s.status==="published"||deletingSubjects} style={{width:22,height:22,flex:"0 0 auto"}}/>:null}
+      <div style={{flex:1}}><strong>{i+1}. {s.subject_name}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{s.stage} · {s.paper} · {s.topics.length} topics · {s.status==="published"?"🔒 Published — unpublish before deleting":"● Draft"}</div></div>
+      {!manageSubjects&&<button className="btn outline small" onClick={()=>openSavedSubject(s)}>OPEN SUBJECT</button>}
      </div>)}</div>}
    </section>
    {topics.length>0&&<section className="card"><h2>✓ {generatedSubject}</h2><p className="muted">{topics.length} topics generated · Draft for teacher review</p><div className="topicList">{topics.map((t,i)=><div className="topicRow" key={(t.id||t.title)+"-"+i}><div><strong>{i+1}. {t.title}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{t.status==="published"?"● Published":"● Draft"}</div></div><button className="btn outline small" onClick={()=>openTopic(t)}>VIEW / EDIT</button></div>)}</div></section>}
