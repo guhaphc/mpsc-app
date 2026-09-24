@@ -3,6 +3,22 @@ import {GoogleGenAI, createPartFromUri, createUserContent} from "@google/genai";
 import {createClient} from "@/lib/supabase/server";
 
 const MODEL=process.env.GEMINI_NOTES_MODEL||"gemini-3.5-flash-lite";
+async function generateImportantKeywords(ai:any, subtopics:any[]){
+ const items=(Array.isArray(subtopics)?subtopics:[]).map((s:any,i:number)=>({index:i,title:String(s?.title||`Subtopic ${i+1}`),content:String(s?.content||"")}));
+ if(!items.length)return [];
+ const prompt=`You are preparing an MPSC/UPSC study reader. From the supplied published study notes, identify only genuinely important examination-relevant keywords that are explicitly present in the notes. Prioritize rulers/kings, dynasties, personalities, places, battles/events, dates or periods, important concepts/terms, texts/literature, art/architecture, institutions and Maharashtra-relevant items when present. Do NOT select ordinary descriptive words, generic adjectives, random capitalized words, or incidental phrases. Do NOT invent or add outside facts. Use the exact terminology appearing in the notes. For each subtopic return 4-10 high-value keywords, fewer if the content does not support more. Return ONLY valid JSON in this shape: {"subtopics":[{"index":0,"keywords":[{"term":"...","category":"Ruler|Dynasty|Personality|Place|Event|Date/Period|Concept|Text/Literature|Art/Architecture|Institution|Other","importance":"high|medium"}]}]}. Notes: ${JSON.stringify(items)}`;
+ const response=await ai.models.generateContent({model:MODEL,contents:prompt,config:{responseMimeType:"application/json",maxOutputTokens:12000}});
+ try{return JSON.parse((response.text||"").trim()).subtopics||[];}catch{return [];}
+}
+async function saveImportantKeywords(supabase:any,ai:any,topicId:string,subtopics:any[]){
+ const generated=await generateImportantKeywords(ai,subtopics);
+ for(let i=0;i<(Array.isArray(subtopics)?subtopics:[]).length;i++){
+  const keywords=Array.isArray(generated.find((x:any)=>Number(x.index)===i)?.keywords)?generated.find((x:any)=>Number(x.index)===i).keywords:[];
+  const clean=keywords.map((k:any)=>({term:String(k?.term||"").trim(),category:String(k?.category||"Other"),importance:String(k?.importance||"high")})).filter((k:any)=>k.term);
+  await supabase.from("study_subtopics").update({important_keywords:clean,updated_at:new Date().toISOString()}).eq("topic_id",topicId).eq("sort_order",i+1);
+ }
+}
+
 export const runtime="nodejs";
 export const maxDuration=300;
 
@@ -23,6 +39,7 @@ export async function POST(request:Request){
   const {data:profile}=await supabase.from("profiles").select("id,role,account_status").eq("id",data.claims.sub).single();
   if(!profile||profile.role!=="teacher"||profile.account_status!=="active")return NextResponse.json({error:"Only active teachers can manage study notes."},{status:403});
   const key=process.env.GEMINI_API_KEY;if(!key)return NextResponse.json({error:"AI service is not configured yet."},{status:503});
+  const ai=new GoogleGenAI({apiKey:key});
   const form=await request.formData();const mode=String(form.get("mode")||"complete_subject");
   if(mode==="save_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); const title=String(form.get("title")||"").trim(); const content=String(form.get("content")||""); if(!subtopicId||!title)return NextResponse.json({error:"Subtopic details are required."},{status:400}); const {data:sub,error}=await supabase.from("study_subtopics").select("id").eq("id",subtopicId).single(); if(error||!sub)return NextResponse.json({error:"Subtopic not found."},{status:404}); const {error:updateError}=await supabase.from("study_subtopics").update({title,content}).eq("id",subtopicId); if(updateError)throw new Error(updateError.message); return NextResponse.json({ok:true,result:{id:subtopicId,title,content}}); }
   if(mode==="delete_subtopic"){ const subtopicId=String(form.get("subtopicId")||""); if(!subtopicId)return NextResponse.json({error:"Subtopic ID is required."},{status:400}); const {error}=await supabase.from("study_subtopics").delete().eq("id",subtopicId); if(error)throw new Error(error.message); return NextResponse.json({ok:true}); }
@@ -66,6 +83,7 @@ export async function POST(request:Request){
     const {error:insertError}=await supabase.from("study_subtopics").insert(rows);
     if(insertError)throw new Error(insertError.message);
    }
+   await saveImportantKeywords(supabase,ai,topicId,subtopics);
    return NextResponse.json({ok:true,saved:true});
   }
   if(mode==="save_topic"){
@@ -103,6 +121,8 @@ ${topic.notes}`;
    if(subs.length){
     const {error:subError}=await supabase.from("study_subtopics").insert(subs.map((s:any,i:number)=>({topic_id:topicId,title:String(typeof s==="string"?s:s.title||`Subtopic ${i+1}`),content:String(typeof s==="string"?"":s.content||""),sort_order:i+1})));
     if(subError)throw new Error(subError.message);
+    const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,sort_order").eq("topic_id",topicId).order("sort_order");
+    await saveImportantKeywords(supabase,ai,topicId,savedSubs||[]);
    }
    return NextResponse.json({ok:true,result:{...parsed,id:topicId}});
   }
