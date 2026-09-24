@@ -450,7 +450,7 @@ If the source is detailed, your response MUST also be detailed.`;
   const topics=topicResults.filter(Boolean);
   if(!topics.length)throw new Error("Gemini could not reconstruct the Master PDF.");
 
-  const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(parsed.subject_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
+  const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(outline.subject_title||outline.source_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
   if(subjectError||!subjectRow)throw new Error(subjectError?.message||"Could not save generated subject.");
   const {data:sourceRow,error:sourceError}=await supabase.from("study_sources").insert({subject_id:subjectRow.id,source_type:"master_pdf",file_name:sourceName,storage_path:sourcePath,created_by:profile.id}).select("id").single();
   if(sourceError||!sourceRow)throw new Error(sourceError?.message||"Could not save source record.");
