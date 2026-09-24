@@ -4,9 +4,24 @@
 import {useState} from "react";
 import {createClient} from "@/lib/supabase/client";
 
-type Subtopic={id?:string;title:string;content:string;sort_order?:number};
-type Topic={id?:string;title:string;notes:string;subtopics?:Subtopic[];subject_id?:string;status?:string};
+type ContentBlock={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table";text?:string;items?:string[];columns?:string[];rows?:string[][]};
+type Subtopic={id?:string;title:string;content:string;content_blocks?:ContentBlock[];sort_order?:number};
+type Topic={id?:string;title:string;notes:string;content_blocks?:ContentBlock[];subtopics?:Subtopic[];subject_id?:string;status?:string};
 
+function renderStructuredBlocks(blocks:ContentBlock[]|undefined, fallback:string){
+ if(!Array.isArray(blocks)||!blocks.length) return renderNoteText(fallback);
+ return blocks.map((b,i)=>{
+  const key="block-"+i;
+  if(b.type==="heading") return <h3 key={key} style={{margin:"20px 0 8px",fontSize:20,fontWeight:800}}>{b.text}</h3>;
+  if(b.type==="subheading") return <h4 key={key} style={{margin:"18px 0 7px",fontSize:17,fontWeight:800,fontStyle:"italic"}}>{b.text}</h4>;
+  if(b.type==="paragraph") return <p key={key} style={{margin:"8px 0",lineHeight:1.75}}>{b.text}</p>;
+  if(b.type==="bullet") return <ul key={key} style={{margin:"8px 0 10px 20px",padding:0}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:6,lineHeight:1.65}}>{x}</li>)}</ul>;
+  if(b.type==="numbered") return <ol key={key} style={{margin:"8px 0 10px 22px",padding:0}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:6,lineHeight:1.65}}>{x}</li>)}</ol>;
+  if(b.type==="callout") return <div key={key} style={{margin:"12px 0",padding:"12px 14px",borderRadius:12,background:"var(--soft)",border:"1px solid var(--line)",fontWeight:600,lineHeight:1.65}}>{b.text}</div>;
+  if(b.type==="table") return <div key={key} style={{overflowX:"auto",margin:"14px 0"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr>{(b.columns||[]).map((x,j)=><th key={j} style={{border:"1px solid var(--line)",padding:8,textAlign:"left"}}>{x}</th>)}</tr></thead><tbody>{(b.rows||[]).map((row,j)=><tr key={j}>{row.map((x,k)=><td key={k} style={{border:"1px solid var(--line)",padding:8,verticalAlign:"top"}}>{x}</td>)}</tr>)}</tbody></table></div>;
+  return null;
+ });
+}
 function renderNoteText(text:string){
  const lines=text.split("\n");
  return lines.map((line,i)=>{
@@ -84,7 +99,7 @@ export default function AIStudyNotes(){
    const form=new FormData();form.append("mode","save_complete_topic");form.append("topicId",selected.id);form.append("notes",editNotes);form.append("subtopics",JSON.stringify(editSubtopics.map((s,i)=>({title:s.title,content:s.content,sort_order:i+1}))));
    const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});
    const data=await res.json();if(!res.ok) throw new Error(data.error||"Could not save complete topic.");
-   const updated={...selected,notes:editNotes,subtopics:editSubtopics.map((s,i)=>({...s,sort_order:i+1}))};
+   const updated={...selected,notes:editNotes,content_blocks:[],subtopics:editSubtopics.map((s,i)=>({...s,sort_order:i+1}))};
    setTopics(prev=>prev.map(t=>t.id===selected.id?updated:t));setSelected(updated);setEditing(false);setMessage("Complete topic saved successfully.");
   }catch(e:any){setError(e?.message||"Could not save complete topic.");}finally{setLoading(false);}
  }
@@ -130,7 +145,7 @@ export default function AIStudyNotes(){
     {editing?<div style={{marginTop:14}}>
       <label>Topic Overview<textarea className="input" value={editNotes} onChange={e=>setEditNotes(e.target.value)} style={{marginTop:8,minHeight:260,resize:"vertical",lineHeight:1.65}}/></label>
       {editSubtopics.length>0&&<div style={{marginTop:22}}><h3>Complete Notes — Subtopics</h3>{editSubtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><label><strong>Subtopic {i+1}</strong><input className="input" value={s.title} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,title:e.target.value}:x))} style={{marginTop:8}}/></label><label style={{display:"block",marginTop:12}}>Content<textarea className="input" value={s.content} onChange={e=>setEditSubtopics(prev=>prev.map((x,j)=>j===i?{...x,content:e.target.value}:x))} style={{marginTop:8,minHeight:360,resize:"vertical",lineHeight:1.65}}/></label></article>)}</div>}
-    </div>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{renderNoteText(selected.notes)}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{renderNoteText(s.content)}</div></article>)}</div>:null}</div>}
+    </div>:<div style={{marginTop:14,padding:14,border:"1px solid var(--line)",borderRadius:14,whiteSpace:"pre-wrap",lineHeight:1.65,fontSize:14}}>{renderNoteText(selected.notes)}{selected.subtopics?.length?<div style={{marginTop:24}}><h3>Complete Notes</h3>{selected.subtopics.map((s,i)=><article key={s.id||i} style={{marginTop:16,padding:16,border:"1px solid var(--line)",borderRadius:14}}><h4 style={{marginTop:0}}>{i+1}. {s.title}</h4><div>{renderStructuredBlocks(s.content_blocks,s.content)}</div></article>)}</div>:null}</div>}
     <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>{!editing?<><button className="btn outline" onClick={()=>{setEditing(true);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>✏️ EDIT COMPLETE NOTES</button><button className="btn outline" onClick={refreshKeywords} disabled={loading}>🔑 REFRESH KEYWORDS</button><button className="btn outline" onClick={regenerate} disabled={loading}>✨ AI REGENERATE</button><button className="btn primary" onClick={async()=>{setLoading(true);setError("");setMessage("");try{const form=new FormData();form.append("mode","set_topic_status");form.append("topicId",selected.id||"");form.append("status",selected.status==="published"?"draft":"published");const res=await fetch("/api/teacher/ai-study-notes/generate",{method:"POST",body:form});const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not update publication status.");const updated={...selected,status:selected.status==="published"?"draft":"published"};setSelected(updated);setTopics(prev=>prev.map(t=>t.id===updated.id?updated:t));setMessage(updated.status==="published"?"Topic published to students.":"Topic unpublished.");}catch(e:any){setError(e?.message||"Could not update publication status.");}finally{setLoading(false);}}} disabled={loading}>{selected.status==="published"?"⏸ UNPUBLISH":"🌐 PUBLISH"}</button></>:<><button className="btn primary" onClick={saveTopic} disabled={loading}>💾 SAVE COMPLETE TOPIC</button><button className="btn secondary" onClick={()=>{setEditing(false);setEditNotes(selected.notes);setEditSubtopics((selected.subtopics||[]).map(s=>({...s})));}}>CANCEL</button></>}</div>
    </section>}
   </main>
