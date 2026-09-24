@@ -69,6 +69,49 @@ export async function POST(request:Request){
    await saveImportantKeywords(supabase,ai,topicId,[subtopic]);
    return NextResponse.json({ok:true,subtopic});
   }
+  if(mode==="delete_subjects"){
+   let subjectIds:string[]=[];
+   try{subjectIds=JSON.parse(String(form.get("subjectIds")||"[]"));}catch{throw new Error("Invalid subject selection.");}
+   subjectIds=[...new Set(subjectIds.map(String).filter(Boolean))];
+   if(!subjectIds.length)return NextResponse.json({error:"Select at least one subject."},{status:400});
+
+   const {data:subjects,error:subjectError}=await supabase.from("study_subjects").select("id,subject_name,status").in("id",subjectIds).eq("created_by",profile.id);
+   if(subjectError)throw new Error(subjectError.message);
+   if((subjects||[]).length!==subjectIds.length)return NextResponse.json({error:"One or more selected subjects were not found or are not owned by this teacher."},{status:403});
+   const published=(subjects||[]).filter((s:any)=>s.status==="published");
+   if(published.length)return NextResponse.json({error:`Published subjects cannot be deleted. Unpublish first: ${published.map((s:any)=>s.subject_name).join(", ")}`},{status:409});
+
+   const {data:sources,error:sourceError}=await supabase.from("study_sources").select("id,storage_path").in("subject_id",subjectIds);
+   if(sourceError)throw new Error(sourceError.message);
+
+   const {data:topics,error:topicError}=await supabase.from("study_topics").select("id").in("subject_id",subjectIds);
+   if(topicError)throw new Error(topicError.message);
+   const topicIds=(topics||[]).map((t:any)=>t.id);
+
+   if(topicIds.length){
+    const {error}=await supabase.from("study_subtopics").delete().in("topic_id",topicIds);
+    if(error)throw new Error(error.message);
+   }
+   const {error:topicsDeleteError}=await supabase.from("study_topics").delete().in("subject_id",subjectIds);
+   if(topicsDeleteError)throw new Error(topicsDeleteError.message);
+
+   const {error:generationDeleteError}=await supabase.from("study_note_generations").delete().in("subject_id",subjectIds);
+   if(generationDeleteError)throw new Error(generationDeleteError.message);
+
+   const {error:sourcesDeleteError}=await supabase.from("study_sources").delete().in("subject_id",subjectIds);
+   if(sourcesDeleteError)throw new Error(sourcesDeleteError.message);
+
+   const {error:subjectsDeleteError}=await supabase.from("study_subjects").delete().in("id",subjectIds).eq("created_by",profile.id);
+   if(subjectsDeleteError)throw new Error(subjectsDeleteError.message);
+
+   const storagePaths=(sources||[]).map((s:any)=>String(s.storage_path||"")).filter(Boolean);
+   if(storagePaths.length){
+    const {error:storageError}=await supabase.storage.from("study-sources").remove(storagePaths);
+    if(storageError)console.error("Study source cleanup warning:",storageError.message);
+   }
+
+   return NextResponse.json({ok:true,deleted:subjectIds.length});
+  }
   if(mode==="delete_topic"){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
    const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
