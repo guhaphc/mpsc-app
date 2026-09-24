@@ -38,14 +38,45 @@ function cleanContentBlocks(value:any){
  }).filter((b:any)=>b.type==="table"?b.columns.length>0&&b.rows.length>0:b.type==="bullet"||b.type==="numbered"?b.items.length>0:b.text);
 }
 
-async function geminiForSource(sourceBlob:Blob,prompt:string,sourceName:string,sourceMime:string,key:string){
- const ai=new GoogleGenAI({apiKey:key});
+async function uploadGeminiSource(ai:any,sourceBlob:Blob,sourceName:string,sourceMime:string){
  const uploaded=await ai.files.upload({file:sourceBlob,config:{displayName:sourceName,mimeType:sourceMime}});
  let ready=uploaded;
- for(let attempt=0;attempt<60&&ready.state?.toString()==="PROCESSING";attempt++){await new Promise(r=>setTimeout(r,2000));ready=await ai.files.get({name:uploaded.name!});}
+ for(let attempt=0;attempt<60&&ready.state?.toString()==="PROCESSING";attempt++){
+  await new Promise(r=>setTimeout(r,2000));
+  ready=await ai.files.get({name:uploaded.name!});
+ }
  if(ready.state?.toString()==="FAILED"||!ready.uri||!ready.mimeType) throw new Error("Gemini could not process the source.");
- const response=await ai.models.generateContent({model:MODEL,contents:createUserContent([createPartFromUri(ready.uri,ready.mimeType),{text:prompt}]),config:{responseMimeType:"application/json",maxOutputTokens:50000}});
- try{return JSON.parse((response.text||"").trim());}catch{throw new Error("Gemini returned an invalid structured response. Please try again.");}
+ return {uri:ready.uri,mimeType:ready.mimeType};
+}
+
+async function generateFromGeminiSource(ai:any,fileRef:any,prompt:string,maxOutputTokens=50000){
+ const response=await ai.models.generateContent({
+  model:MODEL,
+  contents:createUserContent([createPartFromUri(fileRef.uri,fileRef.mimeType),{text:prompt}]),
+  config:{responseMimeType:"application/json",maxOutputTokens}
+ });
+ try{return JSON.parse((response.text||"").trim());}
+ catch{throw new Error("Gemini returned an invalid structured response. Please try again.");}
+}
+
+async function geminiForSource(sourceBlob:Blob,prompt:string,sourceName:string,sourceMime:string,key:string){
+ const ai=new GoogleGenAI({apiKey:key});
+ const fileRef=await uploadGeminiSource(ai,sourceBlob,sourceName,sourceMime);
+ return generateFromGeminiSource(ai,fileRef,prompt,50000);
+}
+
+async function generateInBatches<T>(items:T[],worker:(item:T,index:number)=>Promise<any>,concurrency=3){
+ const results:any[]=new Array(items.length);
+ let next=0;
+ async function runner(){
+  while(true){
+   const index=next++;
+   if(index>=items.length)return;
+   results[index]=await worker(items[index],index);
+  }
+ }
+ await Promise.all(Array.from({length:Math.min(concurrency,Math.max(1,items.length))},()=>runner()));
+ return results;
 }
 
 export async function POST(request:Request){
@@ -262,9 +293,164 @@ ${JSON.stringify((subs||[]).map((s:any)=>({title:s.title,content:s.content})))}`
   if(signedError||!signed?.signedUrl)throw new Error("Could not access uploaded source.");
   const sourceResponse=await fetch(signed.signedUrl);if(!sourceResponse.ok)throw new Error("Could not download uploaded source.");
   const sourceBlob=await sourceResponse.blob();if(sourceBlob.size>50*1024*1024)throw new Error("The source PDF is larger than Gemini's 50 MB limit.");
-  const prompt=`Build comprehensive MPSC ${stage} notes for the subject "${subject}" (${paper}).\nTreat the uploaded master source as the primary source. Do not merely summarize it. Extract and organize the complete subject into logical topics and detailed subtopics. For each topic create substantial, exam-oriented notes preserving important facts, dates, personalities, events, definitions, examples, constitutional/legal provisions where present, Maharashtra-relevant points where present, Prelims facts, Mains analytical points, comparisons, timelines and tables supported by the source. Aim for comprehensive coverage of the source rather than a short overview. Do not invent facts or citations.\nThe most important requirement is semantic structure. Return content_blocks for every topic and subtopic. Allowed block types are heading, subheading, paragraph, bullet, numbered, callout, and table. Use heading for major sections, subheading for named people/rulers/dynasties/events or meaningful subsections, paragraph for explanatory prose, bullet/numbered only for genuine lists, callout for important exam facts, and table only where the source supports a useful table or comparison. Do not use a dash as a proxy for heading. For example, "Babur (1526–1530 CE):" introducing his explanation should be a subheading, while a list item such as "Causes of decline" should remain a bullet if it is genuinely a list item.\nReturn ONLY valid JSON:\n{"topics":[{"title":"...","notes":"plain text overview fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}],"subtopics":[{"title":"...","content":"plain text fallback...","content_blocks":[{"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"..."}]}]}],"study_plan":["..."]}`;
-  const parsed=await geminiForSource(sourceBlob,prompt,sourceName,sourceMime,key);
-  const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(parsed.subject_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
+  // IMPORTANT: Do not ask Gemini to summarize the entire PDF in one response.
+  // First build a lightweight map of the source, then reconstruct each topic independently.
+  // This prevents compression caused by trying to fit a large PDF into one output window.
+  const outlineAi=new GoogleGenAI({apiKey:key});
+  const outlineFile=await uploadGeminiSource(outlineAi,sourceBlob,sourceName,sourceMime);
+
+  const outlinePrompt=`You are the SOURCE INDEXER for an MPSC study-material reconstruction system.
+
+The uploaded Master PDF is the authoritative source.
+
+Your job in this step is ONLY to map the document. DO NOT write study notes and DO NOT summarize the content.
+
+Read the ENTIRE PDF and identify its complete academic structure:
+- every major chapter/topic
+- every meaningful subtopic
+- the order in which topics/subtopics appear
+- topic/subtopic names using the source's terminology
+- approximate page ranges when you can determine them
+
+Do not merge distinct topics merely to make the output shorter.
+Do not omit a section because it appears less important.
+Do not invent topics that are not supported by the source.
+
+Return ONLY valid JSON:
+{
+  "source_title":"...",
+  "topics":[
+    {
+      "title":"...",
+      "source_scope":"brief description of what source material belongs to this topic",
+      "subtopics":[
+        {
+          "title":"...",
+          "source_scope":"brief description of the material belonging to this subtopic",
+          "page_start":1,
+          "page_end":2
+        }
+      ]
+    }
+  ]
+}
+
+The purpose is COMPLETE COVERAGE MAPPING, not summarization.`;
+
+  const outline=await generateFromGeminiSource(outlineAi,outlineFile,outlinePrompt,20000);
+  const outlineTopics=Array.isArray(outline?.topics)?outline.topics:[];
+  if(!outlineTopics.length)throw new Error("Gemini could not identify topics from the Master PDF.");
+
+  const topicResults=await generateInBatches(outlineTopics,async(topicMap:any)=>{
+   const subMaps=Array.isArray(topicMap?.subtopics)?topicMap.subtopics:[];
+   const topicTitle=String(topicMap?.title||"Untitled Topic");
+   const topicPrompt=`You are reconstructing ONE COMPLETE MPSC study topic from an authoritative Master PDF.
+
+MASTER SOURCE RULE:
+The uploaded PDF is the source of truth. Locate ALL material in the PDF belonging to the topic below, including material that appears on different pages or in different sections.
+
+TOPIC:
+${topicTitle}
+
+SOURCE SCOPE:
+${String(topicMap?.source_scope||"")}
+
+REQUIRED SUBTOPICS:
+${JSON.stringify(subMaps)}
+
+ABSOLUTE REQUIREMENT — NO COMPRESSION:
+This is NOT a summary task.
+This is NOT a short-notes task.
+This is NOT a "key points only" task.
+
+Reconstruct the source material comprehensively. Preserve essentially every meaningful academic detail relevant to this topic:
+- definitions and explanations
+- historical background
+- chronology and dates
+- names and personalities
+- rulers, dynasties and institutions
+- events and causes/effects
+- examples and case studies
+- classifications
+- arguments and counterarguments
+- criticism and limitations
+- facts, figures and statistics
+- tables and comparisons
+- terminology
+- conclusions
+- source-supported Prelims facts
+- source-supported Mains analytical material
+
+If the same topic is discussed in multiple places in the PDF, MERGE those passages into one complete treatment without deleting details.
+
+Do not turn a detailed paragraph into one sentence.
+Do not replace a detailed source explanation with a generic explanation from your own knowledge.
+Do not omit information because it is repetitive unless it is genuinely an exact duplicate.
+Do not invent facts or citations.
+
+COPY/PRESERVE SOURCE WORDING where exact wording is useful for definitions, classifications, lists, tables, quotations, technical descriptions or important factual passages. Otherwise, carefully paraphrase while preserving the full meaning and detail.
+
+Keep the required subtopic structure. If the PDF clearly contains an additional meaningful subtopic that the index missed, add it rather than omitting source material.
+
+For each subtopic, return a long, detailed treatment. Length is expected and desirable. Do not optimize for brevity.
+
+FORMATTING:
+Use semantic blocks:
+- heading = major section
+- subheading = named person/ruler/dynasty/event/conceptual subsection introducing explanation
+- paragraph = explanatory prose
+- bullet/numbered = genuine lists only
+- callout = important source-supported definition/fact
+- table = source-supported table/comparison
+
+Do NOT convert ordinary prose into bullets merely to shorten it.
+Do NOT turn every dash into a heading.
+
+Return ONLY valid JSON:
+{
+  "title":"...",
+  "notes":"A useful topic overview, while the detailed source reconstruction remains in subtopics.",
+  "content_blocks":[
+    {"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"...","items":["..."],"columns":["..."],"rows":[["..."]]}
+  ],
+  "subtopics":[
+    {
+      "title":"...",
+      "content":"complete plain-text fallback containing the same detailed information",
+      "content_blocks":[
+        {"type":"heading|subheading|paragraph|bullet|numbered|callout|table","text":"...","items":["..."],"columns":["..."],"rows":[["..."]]}
+      ]
+    }
+  ]
+}
+
+FINAL SELF-CHECK BEFORE RESPONDING:
+1. Did you cover every required subtopic?
+2. Did you preserve detailed explanations rather than summarizing them?
+3. Did you retain dates, names, examples, tables, classifications and other concrete facts?
+4. Did you search the whole PDF for material belonging to this topic?
+5. Did you avoid inventing unsupported information?
+6. Is the output substantially detailed enough to serve as the source-faithful study version?
+
+If the source is detailed, your response MUST also be detailed.`;
+
+   const parsed=await generateFromGeminiSource(outlineAi,outlineFile,topicPrompt,50000);
+   return {
+    title:String(parsed?.title||topicTitle),
+    notes:String(parsed?.notes||""),
+    content_blocks:cleanContentBlocks(parsed?.content_blocks),
+    subtopics:Array.isArray(parsed?.subtopics)?parsed.subtopics.map((sub:any,j:number)=>({
+      title:String(sub?.title||subMaps[j]?.title||`Subtopic ${j+1}`),
+      content:String(sub?.content||""),
+      content_blocks:cleanContentBlocks(sub?.content_blocks)
+    })):[]
+   };
+  },3);
+
+  const topics=topicResults.filter(Boolean);
+  if(!topics.length)throw new Error("Gemini could not reconstruct the Master PDF.");
+
+  const {data:subjectRow,error:subjectError}=await supabase.from("study_subjects").insert({exam:"MPSC State Services",stage,paper,subject_name:String(outline.subject_title||outline.source_title||subject),syllabus_source_name:sourceName,status:"draft",created_by:profile.id}).select("id,subject_name").single();
   if(subjectError||!subjectRow)throw new Error(subjectError?.message||"Could not save generated subject.");
   const {data:sourceRow,error:sourceError}=await supabase.from("study_sources").insert({subject_id:subjectRow.id,source_type:"master_pdf",file_name:sourceName,storage_path:sourcePath,created_by:profile.id}).select("id").single();
   if(sourceError||!sourceRow)throw new Error(sourceError?.message||"Could not save source record.");
