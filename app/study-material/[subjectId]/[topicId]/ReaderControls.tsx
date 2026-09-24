@@ -1,4 +1,5 @@
-"use client";\nimport {useEffect,useState} from "react";
+"use client";
+import {useEffect,useState} from "react";
 type Keyword={term:string;category:string;importance?:string};
 type Sub={id:string;title:string;content:string;important_keywords?:Keyword[]};
 export default function ReaderControls({title,notes,topicId,initialBookmarked,initialCompleted,subtopics}:{title:string;notes:string;topicId:string;initialBookmarked:boolean;initialCompleted:boolean;subtopics:Sub[]}) {
