@@ -38,6 +38,25 @@ export async function POST(request:Request){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
    const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
   }
+  if(mode==="save_complete_topic"){
+   const topicId=String(form.get("topicId")||"");
+   const notes=String(form.get("notes")||"");
+   let subtopics:any[]=[];
+   try{subtopics=JSON.parse(String(form.get("subtopics")||"[]"));}catch{throw new Error("Invalid subtopics data.");}
+   if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   const {data:topic,error:topicError}=await supabase.from("study_topics").select("id").eq("id",topicId).single();
+   if(topicError||!topic) return NextResponse.json({error:"Topic not found."},{status:404});
+   const {error:updateError}=await supabase.from("study_topics").update({notes,updated_at:new Date().toISOString()}).eq("id",topicId);
+   if(updateError)throw new Error(updateError.message);
+   const {error:deleteError}=await supabase.from("study_subtopics").delete().eq("topic_id",topicId);
+   if(deleteError)throw new Error(deleteError.message);
+   if(Array.isArray(subtopics)&&subtopics.length){
+    const rows=subtopics.map((s:any,i:number)=>({topic_id:topicId,title:String(s?.title||`Subtopic ${i+1}`),content:String(s?.content||""),sort_order:i+1}));
+    const {error:insertError}=await supabase.from("study_subtopics").insert(rows);
+    if(insertError)throw new Error(insertError.message);
+   }
+   return NextResponse.json({ok:true,saved:true});
+  }
   if(mode==="save_topic"){
    const topicId=String(form.get("topicId")||"");const notes=String(form.get("notes")||"");
    if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
