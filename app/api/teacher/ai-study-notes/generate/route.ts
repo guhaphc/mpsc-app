@@ -83,6 +83,65 @@ export async function POST(request:Request){
    const {data:updated}=await supabase.from("study_subtopics").select("id,title,content,sort_order,important_keywords").eq("topic_id",topicId).order("sort_order");
    return NextResponse.json({ok:true,subtopics:updated||[]});
   }
+  if(mode==="format_topic"){
+   const topicId=String(form.get("topicId")||"");
+   if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   const {data:topic,error:topicError}=await supabase.from("study_topics").select("id,title,notes,content_blocks,subject_id").eq("id",topicId).single();
+   if(topicError||!topic)throw new Error("Topic not found.");
+   const {data:subject,error:subjectError}=await supabase.from("study_subjects").select("subject_name,stage,paper").eq("id",topic.subject_id).single();
+   if(subjectError||!subject)throw new Error("Subject not found.");
+   const {data:subs,error:subsError}=await supabase.from("study_subtopics").select("id,title,content,content_blocks,sort_order").eq("topic_id",topicId).order("sort_order");
+   if(subsError)throw new Error(subsError.message);
+   const prompt=`You are the editorial formatter for a premium MPSC study-reading platform.
+Transform the supplied study notes into a polished semantic reading document. Use general knowledge only to recognize structure and terminology. Do NOT add factual claims that are not supported by the supplied notes.
+Subject: ${subject.subject_name}; Stage: ${subject.stage}; Paper: ${subject.paper}; Topic: ${topic.title}
+
+Rules:
+- Preserve meaning and factual content.
+- Identify headings and subheadings from context, not punctuation alone.
+- A line such as "गुर्जर-प्रतिहार (Gurjara-Pratiharas):" introducing an explanation is a SUBHEADING, not a bullet.
+- Named rulers, dynasties, personalities, institutions, events and meaningful conceptual sections that introduce explanation should normally be SUBHEADINGS.
+- Use HEADING for major sections.
+- Use PARAGRAPH for explanatory prose.
+- Use BULLET/NUMBERED only for genuine lists.
+- Use CALLOUT for an important fact or definition already present.
+- Use TABLE only when the notes clearly contain comparable structured information.
+- Do not turn every short line into a heading.
+- Keep Marathi natural and preserve existing English terms in parentheses.
+- Make the result feel like a premium textbook, not a text editor.
+
+Return ONLY valid JSON:
+{"notes":"clean plain-text fallback","content_blocks":[...],"subtopics":[{"title":"...","content":"clean plain-text fallback","content_blocks":[...]}]}
+Allowed block shapes:
+heading/subheading/callout: {"type":"heading|subheading|callout","text":"..."}
+paragraph: {"type":"paragraph","text":"..."}
+bullet/numbered: {"type":"bullet|numbered","items":["...","..."]}
+table: {"type":"table","columns":["..."],"rows":[["..."]]}
+
+Existing topic overview:
+${topic.notes}
+
+Existing subtopics:
+${JSON.stringify((subs||[]).map((s:any)=>({title:s.title,content:s.content})))}`;
+   const response=await ai.models.generateContent({model:MODEL,contents:prompt,config:{responseMimeType:"application/json",maxOutputTokens:50000}});
+   let parsed:any;try{parsed=JSON.parse((response.text||"").trim());}catch{throw new Error("AI returned an invalid reading structure. Please try again.");}
+   const notes=String(parsed.notes||topic.notes||"");
+   const blocks=cleanContentBlocks(parsed.content_blocks);
+   const {error:updateError}=await supabase.from("study_topics").update({notes,content_blocks:blocks,updated_at:new Date().toISOString()}).eq("id",topicId);
+   if(updateError)throw new Error(updateError.message);
+   const returnedSubs:any[]=Array.isArray(parsed.subtopics)?parsed.subtopics:[];
+   const sourceSubs=subs||[];
+   for(let i=0;i<sourceSubs.length;i++){
+    const src:any=sourceSubs[i], out:any=returnedSubs[i]||{};
+    const content=String(out.content||src.content||"");
+    const subBlocks=cleanContentBlocks(out.content_blocks);
+    const title=String(out.title||src.title||"");
+    const {error:updateSubError}=await supabase.from("study_subtopics").update({title,content,content_blocks:subBlocks,updated_at:new Date().toISOString()}).eq("id",src.id);
+    if(updateSubError)throw new Error(updateSubError.message);
+   }
+   const {data:savedSubs}=await supabase.from("study_subtopics").select("id,title,content,content_blocks,sort_order,important_keywords").eq("topic_id",topicId).order("sort_order");
+   return NextResponse.json({ok:true,result:{...topic,notes,content_blocks:blocks,subtopics:savedSubs||[]}});
+  }
   if(mode==="set_topic_status"){
    const topicId=String(form.get("topicId")||"");
    const status=String(form.get("status")||"draft");
