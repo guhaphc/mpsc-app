@@ -1,28 +1,4 @@
-import {NextResponse} from "next/server";
-import {GoogleGenAI} from "@google/genai";
-import {createClient} from "@/lib/supabase/server";
-const MODEL=process.env.GEMINI_NOTES_MODEL||"gemini-3.5-flash-lite";
-export const runtime="nodejs"; export const maxDuration=90;
-export async function POST(request:Request){
- try{
-  const supabase=await createClient();const {data}=await supabase.auth.getClaims();if(!data?.claims)return NextResponse.json({error:"Please login again."},{status:401});
-  const {data:profile}=await supabase.from("profiles").select("role,account_status").eq("id",data.claims.sub).single();if(!profile||profile.role!=="student"||profile.account_status!=="active")return NextResponse.json({error:"Only active students can use this feature."},{status:403});
-  const b=await request.json();const keyword=String(b.keyword||"").trim();const context=String(b.context||"").trim();const language=String(b.language||"English")==="Marathi"?"Marathi":"English";
-  if(!keyword||!context)return NextResponse.json({error:"Keyword context is required."},{status:400});
-  const key=process.env.GEMINI_API_KEY;if(!key)return NextResponse.json({error:"AI service is not configured."},{status:503});
-  const ai=new GoogleGenAI({apiKey:key});
-  const prompt=`Explain the keyword "${keyword}" for an MPSC student in ${language}. Use ONLY the supplied published study-note context as the primary factual source. Do not contradict, replace, silently correct, or invent facts. Give: Meaning/definition, detailed explanation, important facts or dates explicitly supported by the context, MPSC relevance, and quick revision points. Write the entire response in ${language}; do not switch back to English. If a specialist term needs the English term, place it in parentheses after the Marathi term. If the context does not provide enough information, say that clearly in ${language}. Return plain text with clear headings. Context:\n${context}`;
-  const r=await ai.models.generateContent({model:MODEL,contents:prompt});
- let explanation=r.text||"";
- if(language==="Marathi"){
-  const latin=(explanation.match(/[A-Za-z]/g)||[]).length;
-  const devanagari=(explanation.match(/[\\u0900-\\u097F]/g)||[]).length;
-  if(devanagari<latin){
-   const fallback=`खालील MPSC उत्तर पूर्णपणे मराठीत भाषांतरित करा. अर्थ, तथ्ये, मांडणी आणि सर्व मुद्दे जसेच्या तसे ठेवा. अनावश्यक इंग्रजी वापरू नका; फक्त आवश्यक ऐतिहासिक/तांत्रिक संज्ञा कंसात मूळ इंग्रजीत ठेवू शकता. कोणतीही नवीन माहिती जोडू नका. केवळ अंतिम मराठी उत्तर द्या. उत्तर:\\n${explanation}`;
-   const translated=await ai.models.generateContent({model:MODEL,contents:fallback});
-   explanation=translated.text||explanation;
-  }
- }
- return NextResponse.json({ok:true,explanation});
- }catch(e:any){return NextResponse.json({error:e?.message||"Could not explain keyword."},{status:500});}
-}
+import {NextResponse} from "next/server";import {GoogleGenAI} from "@google/genai";import {createClient} from "@/lib/supabase/server";
+const MODEL=process.env.GEMINI_NOTES_MODEL||"gemini-3.5-flash-lite";export const runtime="nodejs";export const maxDuration=90;
+const norm=(v:string)=>v.trim().toLowerCase().replace(/\s+/g," ");
+export async function POST(request:Request){try{const s=await createClient();const {data}=await s.auth.getClaims();if(!data?.claims)return NextResponse.json({error:"Please login again."},{status:401});const {data:p}=await s.from("profiles").select("id,role,account_status").eq("id",data.claims.sub).single();if(!p||p.role!=="student"||p.account_status!=="active")return NextResponse.json({error:"Only active students can use this feature."},{status:403});const b=await request.json();const keyword=String(b.keyword||"").trim();const language=String(b.language||"English")==="Marathi"?"Marathi":"English";if(!keyword)return NextResponse.json({error:"Keyword is required."},{status:400});const {data:saved}=await s.from("study_keyword_explanations").select("explanation").eq("normalized_keyword",norm(keyword)).eq("language",language).maybeSingle();if(saved?.explanation)return NextResponse.json({ok:true,explanation:saved.explanation,cached:true});const context=String(b.context||"").trim();if(!context)return NextResponse.json({error:"Keyword context is required."},{status:400});const key=process.env.GEMINI_API_KEY;if(!key)return NextResponse.json({error:"AI service is not configured."},{status:503});const ai=new GoogleGenAI({apiKey:key});const prompt=`Explain the keyword "${keyword}" for an MPSC student in ${language}. Use ONLY the supplied published study-note context. Do not invent facts. Give meaning, important facts/dates supported by the context, MPSC relevance and quick revision points. Write entirely in ${language}; retain only necessary English technical terms in parentheses. Context:\n${context}`;const r=await ai.models.generateContent({model:MODEL,contents:prompt});const explanation=r.text||"";await s.from("study_keyword_explanations").upsert({keyword,normalized_keyword:norm(keyword),language,explanation,ai_model:MODEL,updated_at:new Date().toISOString()},{onConflict:"normalized_keyword,language"});const u:any=(r as any).usageMetadata||{};await s.from("ai_usage_logs").insert({user_id:p.id,operation:"keyword_explanation_fallback",model:MODEL,status:"completed",input_tokens:Number(u.promptTokenCount||0)||null,output_tokens:Number(u.candidatesTokenCount||0)||null,total_tokens:Number(u.totalTokenCount||0)||null,completed_at:new Date().toISOString()});return NextResponse.json({ok:true,explanation,cached:false});}catch(e:any){return NextResponse.json({error:e?.message||"Could not explain keyword."},{status:500});}}
