@@ -74,7 +74,7 @@ function extractColumn(page:any,side:"left"|"right",pageNo:number){
   let text="";
   for(const r of (t.R||[])){
    const raw=String(r.T||"");
-   try{text+=decodeURIComponent(raw);}catch{text+=raw;}
+   text+=raw;
   }
   return [{text,x:Number(t.x||0),y:Number(t.y||0)}];
  }).filter((x:any)=>x.text.trim()&&(side==="left"?x.x<mid:x.x>=mid));
@@ -131,8 +131,8 @@ export async function POST(req:Request){
 
   const bytes=Buffer.from(await f.arrayBuffer());
   const pdf2json=await import("pdf2json");
-  const PDFParser=(pdf2json as any).PDFParser;
-  if(!PDFParser)throw new Error("PDF parser module is unavailable.");
+  const PDFParser=(pdf2json as any).PDFParser ?? (pdf2json as any).default;
+  if(!PDFParser)throw new Error("PDF parser module is unavailable. Available exports: "+Object.keys(pdf2json as any).join(", "));
   const parser=new PDFParser();
   const pdfData:any=await new Promise((resolve,reject)=>{
    parser.on("pdfParser_dataReady",(data:any)=>resolve(data));
