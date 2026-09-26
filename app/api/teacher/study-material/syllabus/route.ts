@@ -30,7 +30,7 @@ export async function POST(req:Request){
   if(!all.length)throw new Error("No syllabus entries were detected.");
   const seen=new Set<string>();const list=all.filter(n=>{const k=n.path.join("\u001f");if(seen.has(k))return false;seen.add(k);return true;});
   const sourceTitle=clean(list[0]?.path?.[0])||f.name;
-  const {data:src,error:srcErr}=await s.from("ai_study_syllabus_sources").insert({name:sourceTitle,exam:"UPSC",academic_year:"2026-27",source_file_name:f.name,source_pages:84,storage_path:storagePath,status:"active",created_by:p.id}).select("id").single();if(srcErr||!src)throw new Error(srcErr?.message||"Could not create syllabus source.");
+  const {data:src,error:srcErr}=await s.from("ai_study_syllabus_sources").insert({name:sourceTitle,exam:"UPSC",academic_year:"2026-27",source_file_name:f.name,source_pages:84,storage_path:storagePath,status:"active",created_by:p.id}).select("id").single();if(srcErr)throw new Error(srcErr.message||"Could not create syllabus source.");if(!src?.id)throw new Error("Could not create syllabus source.");
   const sourceId=src.id;const rootId=crypto.randomUUID();const rows:any[]=[{id:rootId,source_id:sourceId,parent_id:null,node_type:"root",title:sourceTitle,depth:0,source_page:1,source_order:0,is_leaf:false,status:"active"}];
   const parentByPath=new Map<string,string>();parentByPath.set(sourceTitle,rootId);
   let order=1;
@@ -40,7 +40,7 @@ export async function POST(req:Request){
    const id=crypto.randomUUID();const node_type=item.leaf?"micro_topic":level<=1?"topic":level===2?"subtopic":"micro_detail";
    rows.push({id,source_id:sourceId,parent_id:parent,title,depth:level,node_type,source_page:item.page,source_order:order++,is_leaf:item.leaf,status:"active"});parentByPath.set(keyPath,id);
   }
-  const {data:old}=await s.from("ai_study_syllabus_sources").select("id").eq("source_file_name",f.name).eq("status","active");if(old){for(const x of old){if(x?.id&&x.id!==sourceId){await s.from("ai_study_syllabus_sources").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",x.id);}}}
+  const oldResult=await s.from("ai_study_syllabus_sources").select("id").eq("source_file_name",f.name).eq("status","active");const oldRows=oldResult.data??[];for(const x of oldRows){const oldId=x?.id;if(oldId&&oldId!==sourceId){await s.from("ai_study_syllabus_sources").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",oldId);}}
   for(let i=0;i<rows.length;i+=500){const {error}=await s.from("ai_study_syllabus_nodes").insert(rows.slice(i,i+500));if(error)throw new Error(error.message);}
   return NextResponse.json({ok:true,nodes:rows.length-1,sourceId,duplicatesRemoved:all.length-list.length});
  }catch(e:any){return NextResponse.json({error:e?.message||"Syllabus import failed."},{status:500});}
