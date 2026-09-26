@@ -72,10 +72,10 @@ async function extractColumn(page:any,side:"left"|"right",pageNo:number){
  const viewport=page.getViewport({scale:1});
  const mid=viewport.width/2;
  const items=(content.items as any[]).filter(x=>typeof x.str==="string"&&x.str.trim()).map(x=>({
-  str:String(x.str),x:Number(x.transform?.[4]??0),y:Number(x.transform?.[5]??0)
+  str:String(x.str),x:Number(x.transform?.[4]??0),y:Number(viewport.height-(x.transform?.[5]??0))
  })).filter(x=>(side==="left"?x.x<mid:x.x>=mid)&&x.y>35&&x.y<viewport.height-25);
  const lines:{y:number,parts:{str:string,x:number}[]}[]=[];
- for(const item of items.sort((a,b)=>b.y-a.y||a.x-b.x)){
+ for(const item of items.sort((a,b)=>a.y-b.y||a.x-b.x)){
   const last=lines[lines.length-1];
   if(!last||Math.abs(last.y-item.y)>5) lines.push({y:item.y,parts:[item]});
   else last.parts.push(item);
@@ -144,7 +144,7 @@ export async function POST(req:Request){
   await doc.destroy();
   if(!parsed.length)throw new Error("No syllabus hierarchy entries were detected. The PDF does not appear to use a supported structured syllabus format.");
 
-  parsed.sort((a,b)=>a.page-b.page||a.y-b.y||(a.side==="left"?-1:1));
+  parsed.sort((a,b)=>a.page-b.page||(a.side===b.side?a.y-b.y:(a.side==="left"?-1:1)));
   const paths:any[]=[];
   const stacks=new Map<string,{level:number,title:string}[]>();
   const seen=new Set<string>();
