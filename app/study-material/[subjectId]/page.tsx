@@ -5,7 +5,7 @@ import {createClient} from "@/lib/supabase/server";
 export default async function SubjectPage({params}:{params:Promise<{subjectId:string}>}){
  const {subjectId}=await params; const supabase=await createClient(); const {data}=await supabase.auth.getClaims(); if(!data?.claims)redirect("/login");
  const {data:profile}=await supabase.from("profiles").select("role,account_status").eq("id",data.claims.sub).single(); if(!profile||profile.role!=="student"||profile.account_status!=="active")redirect("/dashboard");
- const {data:subject}=await supabase.from("study_subjects").select("id,subject_name,stage,paper").eq("id",subjectId).eq("status","published").single(); if(!subject)notFound();
+ const {data:subject}=await supabase.from("study_subjects").select("id,subject_name,stage,paper").eq("id",subjectId).eq("status","published").eq("content_area","teacher").single(); if(!subject)notFound();
  const {data:topics}=await supabase.from("study_topics").select("id,title,notes,sort_order").eq("subject_id",subjectId).eq("status","published").order("sort_order");
  const {data:completedRows}=await supabase.from("study_material_progress").select("topic_id").eq("user_id",data.claims.sub); const completedIds=new Set((completedRows||[]).map(x=>x.topic_id));
  return <div className="shell">
