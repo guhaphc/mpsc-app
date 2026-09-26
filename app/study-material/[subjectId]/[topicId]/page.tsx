@@ -9,7 +9,7 @@ export default async function TopicReader({params}:{params:Promise<{subjectId:st
  const {data}=await supabase.auth.getClaims(); if(!data?.claims)redirect("/login");
  const {data:profile}=await supabase.from("profiles").select("id,role,account_status").eq("id",data.claims.sub).single();
  if(!profile||profile.role!=="student"||profile.account_status!=="active")redirect("/dashboard");
- const {data:subject}=await supabase.from("study_subjects").select("id,subject_name,stage,paper").eq("id",subjectId).eq("status","published").single(); if(!subject)notFound();
+ const {data:subject}=await supabase.from("study_subjects").select("id,subject_name,stage,paper").eq("id",subjectId).eq("status","published").eq("content_area","teacher").single(); if(!subject)notFound();
  const {data:topic}=await supabase.from("study_topics").select("id,title,notes,content_blocks,sort_order").eq("id",topicId).eq("subject_id",subjectId).eq("status","published").single(); if(!topic)notFound();
  const {data:subs}=await supabase.from("study_subtopics").select("id,title,content,content_blocks,sort_order,important_keywords").eq("topic_id",topicId).order("sort_order");
  const {data:bookmark}=await supabase.from("study_bookmarks").select("id").eq("user_id",profile.id).eq("topic_id",topicId).maybeSingle();
