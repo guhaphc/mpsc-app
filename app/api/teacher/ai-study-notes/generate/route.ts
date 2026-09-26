@@ -476,6 +476,6 @@ If the source is detailed, your response MUST also be detailed.`;
   savedTopics=(rows||[]).map((r:any,i:number)=>({...topics[i],id:r.id,title:r.title,notes:r.notes}));
   const {error:generationError}=await supabase.from("study_note_generations").insert({subject_id:subjectRow.id,source_id:sourceRow.id,generation_type:"complete_subject",status:"completed",message:"Generated from Master PDF using Gemini.",created_by:profile.id,completed_at:new Date().toISOString()});
   if(generationError)throw new Error(generationError.message);
-  return NextResponse.json({ok:true,model:MODEL,result:{...parsed,topics:savedTopics},subjectId:subjectRow.id,saved:true});
+  return NextResponse.json({ok:true,model:MODEL,result:{...outline,topics:savedTopics},subjectId:subjectRow.id,saved:true});
  }catch(error:any){return NextResponse.json({error:error?.message||"Unable to manage notes."},{status:500});}
 }
