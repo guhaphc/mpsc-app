@@ -127,7 +127,7 @@ export async function POST(req:Request){
 
   const bytes=new Uint8Array(await f.arrayBuffer());
   const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc=await pdfjs.getDocument({data:bytes,disableWorker:true}).promise;
+  const doc=await pdfjs.getDocument({data:bytes}).promise;
   const pageCount=doc.numPages;
   if(!pageCount)throw new Error("The PDF contains no readable pages.");
 
@@ -141,7 +141,6 @@ export async function POST(req:Request){
    }
    page.cleanup();
   }
-  await doc.destroy();
   if(!parsed.length)throw new Error("No syllabus hierarchy entries were detected. The PDF does not appear to use a supported structured syllabus format.");
 
   parsed.sort((a,b)=>a.page-b.page||(a.side===b.side?a.y-b.y:(a.side==="left"?-1:1)));
