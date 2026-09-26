@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
-const PDFParser = require("pdf2json");
+import {PDFParser} from "pdf2json";
 
 export const runtime="nodejs";
 export const maxDuration=300;
