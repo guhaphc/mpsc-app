@@ -9,10 +9,10 @@ async function upload(ai:any,file:File){const u=await ai.files.upload({file,conf
 const schema={type:"object",properties:{source_title:{type:"string"},nodes:{type:"array",items:{type:"object",properties:{path:{type:"array",items:{type:"string"}},page:{type:"integer"},leaf:{type:"boolean"}},required:["path","page","leaf"]}}},required:["source_title","nodes"]};
 
 async function extractChunk(ai:any,ref:any,start:number,end:number,previousPath:string[]){
- const prompt="You are indexing an authoritative syllabus PDF. Extract EVERY distinct syllabus entry printed on PDF pages "+start+" through "+end+" inclusive. Do not summarize, merge, correct, invent or omit entries. Preserve exact wording and printed hierarchy. Return one node for every printed hierarchy entry, including headings. For every node return its COMPLETE hierarchy path from the top-level subject down to that entry. If a parent heading is not printed on the current page range but is needed to complete the path, use the supplied previous context only; never invent a new heading. Mark leaf=true only when that entry has no child entry in the source. Ignore headers, footers, page numbers, logos and website text. If a line wraps, join it without changing words. Previous context from the end of the preceding chunk: "+JSON.stringify(previousPath)+" . Return ONLY the required JSON schema. Pages are PDF page numbers.";
- const r=await ai.models.generateContent({model:"gemini-3.5-flash-lite",contents:createUserContent([createPartFromUri(ref.uri,ref.mimeType),{text:prompt}]),config:{responseMimeType:"application/json",responseSchema:schema as any,maxOutputTokens:30000}});
- let parsed:any;try{parsed=JSON.parse(String(r.text||"").trim())}catch{throw new Error("Gemini returned invalid JSON while indexing PDF pages "+start+"-"+end+".");}
- return parsed;
+ const prompt="You are indexing an authoritative syllabus PDF. Extract EVERY distinct syllabus entry printed on PDF pages "+start+" through "+end+" inclusive. Do not summarize, merge, correct, invent or omit entries. Preserve exact wording and printed hierarchy. Return one node for every printed hierarchy entry, including headings. For every node return its COMPLETE hierarchy path from the top-level subject down to that entry. If a parent heading is not printed on the current page range but is needed to complete the path, use the supplied previous context only; never invent a new heading. Mark leaf=true only when that entry has no child entry in the source. Ignore headers, footers, page numbers, logos and website text. If a line wraps, join it without changing words. Previous context from the end of the preceding chunk: "+JSON.stringify(previousPath)+" . Return ONLY valid JSON matching the required schema. Do not use markdown fences or explanatory text.";
+ const r=await ai.models.generateContent({model:"gemini-3.5-flash-lite",contents:createUserContent([createPartFromUri(ref.uri,ref.mimeType),{text:prompt}]),config:{responseMimeType:"application/json",responseSchema:schema as any,maxOutputTokens:12000}});
+ const text=String(r.text||"").trim();
+ try{return JSON.parse(text)}catch{throw new Error("Gemini returned invalid JSON while indexing PDF pages "+start+"-"+end+".");}
 }
 
 export async function POST(req:Request){
@@ -24,9 +24,34 @@ export async function POST(req:Request){
   const storagePath=p.id+"/"+crypto.randomUUID()+"-"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   const {error:storageError}=await s.storage.from("ai-study-syllabus").upload(storagePath,f,{contentType:"application/pdf",upsert:false});if(storageError)throw new Error("Could not store the syllabus PDF: "+storageError.message);
   const ai=new GoogleGenAI({apiKey:key});const ref=await upload(ai,f);
-  const chunks:number[][]=[];for(let start=1;start<=84;start+=9)chunks.push([start,Math.min(start+8,84)]);
+  const chunks:number[][]=[];for(let start=1;start<=84;start+=3)chunks.push([start,Math.min(start+2,84)]);
   const all:any[]=[];let previousPath:string[]=[];
-  for(const [start,end] of chunks){const parsed=await extractChunk(ai,ref,start,end,previousPath);if(!Array.isArray(parsed.nodes))throw new Error("Invalid syllabus result for pages "+start+"-"+end+".");for(const n of parsed.nodes){const path=Array.isArray(n.path)?n.path.map(clean).filter(Boolean):[];if(path.length)all.push({path,page:Math.max(1,Number(n.page)||start),leaf:Boolean(n.leaf)});}const last=all[all.length-1];if(last)previousPath=last.path;}
+  for(const [start,end] of chunks){
+   let parsed:any;
+   try{
+    parsed=await extractChunk(ai,ref,start,end,previousPath);
+   }catch(firstError){
+    if(start===end)throw firstError;
+    parsed=null;
+    for(let page=start;page<=end;page++){
+     const single=await extractChunk(ai,ref,page,page,previousPath);
+     if(!Array.isArray(single.nodes))throw new Error("Invalid syllabus result for page "+page+".");
+     for(const n of single.nodes){
+      const path=Array.isArray(n.path)?n.path.map(clean).filter(Boolean):[];
+      if(path.length)all.push({path,page:Math.max(1,Number(n.page)||page),leaf:Boolean(n.leaf)});
+     }
+     const lastSingle=all[all.length-1];
+     if(lastSingle)previousPath=lastSingle.path;
+    }
+    continue;
+   }
+   if(!Array.isArray(parsed.nodes))throw new Error("Invalid syllabus result for pages "+start+"-"+end+".");
+   for(const n of parsed.nodes){
+    const path=Array.isArray(n.path)?n.path.map(clean).filter(Boolean):[];
+    if(path.length)all.push({path,page:Math.max(1,Number(n.page)||start),leaf:Boolean(n.leaf)});
+   }
+   const last=all[all.length-1];if(last)previousPath=last.path;
+  }
   if(!all.length)throw new Error("No syllabus entries were detected.");
   const seen=new Set<string>();const list=all.filter(n=>{const k=n.path.join("\u001f");if(seen.has(k))return false;seen.add(k);return true;});
   const sourceTitle=clean(list[0]?.path?.[0])||f.name;
