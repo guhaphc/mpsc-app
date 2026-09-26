@@ -1,6 +1,5 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
-import {PDFParser} from "pdf2json";
 
 export const runtime="nodejs";
 export const maxDuration=300;
@@ -131,6 +130,9 @@ export async function POST(req:Request){
   if(f.type&&f.type!=="application/pdf")return NextResponse.json({error:"Only PDF files are supported."},{status:400});
 
   const bytes=Buffer.from(await f.arrayBuffer());
+  const pdf2json=await import("pdf2json");
+  const PDFParser=(pdf2json as any).PDFParser;
+  if(!PDFParser)throw new Error("PDF parser module is unavailable.");
   const parser=new PDFParser();
   const pdfData:any=await new Promise((resolve,reject)=>{
    parser.on("pdfParser_dataReady",(data:any)=>resolve(data));
