@@ -127,6 +127,7 @@ export async function POST(req:Request){
 
   const bytes=new Uint8Array(await f.arrayBuffer());
   const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdf.worker.mjs", import.meta.url).toString();
   const doc=await pdfjs.getDocument({data:bytes}).promise;
   const pageCount=doc.numPages;
   if(!pageCount)throw new Error("The PDF contains no readable pages.");
