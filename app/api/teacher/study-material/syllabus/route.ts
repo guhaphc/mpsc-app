@@ -152,6 +152,33 @@ export async function POST(req:Request){
    }
   }
   parsed.sort((a,b)=>a.page-b.page||(a.side===b.side?a.y-b.y:(a.side==="left"?-1:1)));
+  const paths:any[]=[];
+  const stacks=new Map<string,{level:number,title:string}[]>();
+  const seen=new Set<string>();
+  let order=0;
+  for(const item of parsed){
+   const subject=subjectForPage(item.page);
+   const stack=stacks.get(subject)||[];
+   const markerLevel=MARKERS.get(item.marker)??1;
+   while(stack.length&&stack[stack.length-1].level>=markerLevel)stack.pop();
+   const section=item.section;
+   const path=[subject];
+   if(section)path.push(section);
+   stack.push({level:markerLevel,title:item.title});
+   path.push(...stack.map(x=>x.title));
+   const key=path.join("\u001f");
+   if(!seen.has(key)){
+    seen.add(key);
+    paths.push({path,page:item.page,order:order++});
+   }
+   stacks.set(subject,stack);
+  }
+  // Remove accidental section/header duplication from path construction.
+  const normalized=paths.map(x=>({...x,path:x.path.filter((v:string,i:number,a:string[])=>i===0||v!==a[i-1])}));
+  for(let i=0;i<normalized.length;i++){
+   const next=normalized[i+1]?.path||[];
+   normalized[i].leaf=!(next.length>normalized[i].path.length&&next.slice(0,normalized[i].path.length).every((v:string,j:number)=>v===normalized[i].path[j]));
+  }
   const storagePath=p.id+"/"+crypto.randomUUID()+"-"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   const {error:storageError}=await s.storage.from("ai-study-syllabus").upload(storagePath,f,{contentType:"application/pdf",upsert:false});
   if(storageError)throw new Error("Could not store the syllabus PDF: "+storageError.message);
