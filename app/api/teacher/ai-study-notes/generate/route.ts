@@ -145,6 +145,11 @@ export async function POST(request:Request){
   }
   if(mode==="delete_topic"){
    const topicId=String(form.get("topicId")||"");if(!topicId)return NextResponse.json({error:"Topic ID is required."},{status:400});
+   const {data:topic}=await supabase.from("study_topics").select("id,subject_id,status").eq("id",topicId).single();
+   if(!topic)return NextResponse.json({error:"Topic not found."},{status:404});
+   const {data:subject}=await supabase.from("study_subjects").select("id,status,created_by").eq("id",topic.subject_id).single();
+   if(!subject||subject.created_by!==profile.id)return NextResponse.json({error:"You do not own this topic."},{status:403});
+   if(subject.status==="published"||topic.status==="published")return NextResponse.json({error:"Published topics cannot be deleted. Unpublish first."},{status:409});
    const {error}=await supabase.from("study_topics").delete().eq("id",topicId);if(error)throw new Error(error.message);return NextResponse.json({ok:true});
   }
   if(mode==="refresh_keywords"){
