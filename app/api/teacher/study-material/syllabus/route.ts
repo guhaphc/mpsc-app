@@ -43,11 +43,13 @@ function defaultSection(page:number){
  return null;
 }
 function sectionAt(page:number,side:"left"|"right",y:number,base:string|null){
- // Pages 8-9 contain two different History streams in the two columns.
- // Keep the source's column structure: Modern History -> Post Independence -> World History.
- if(page===8) return side==="left" ? "MODERN HISTORY" : "POST INDEPENDENCE CONSOLIDATION";
- if(page===9) return side==="left" ? "POST INDEPENDENCE CONSOLIDATION" : "WORLD HISTORY";
- if(page===10) return "WORLD HISTORY";
+ // History transitions follow the actual printed syllabus pages:
+ // p5: Modern History begins near the bottom
+ // p6: Post-Independence Consolidation begins near the bottom
+ // p7: World History begins near the bottom
+ // p8: World History continues
+ // p9: World History continues at the top, then Indian Culture begins.
+ if(page===9 && y>=220) return "INDIAN CULTURE";
  if(page===20){
   if(side==="left"&&y>=590) return "HUMAN GEOGRAPHY";
   return "PHYSICAL GEOGRAPHY OF INDIA";
