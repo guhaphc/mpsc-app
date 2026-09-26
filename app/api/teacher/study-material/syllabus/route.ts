@@ -197,20 +197,38 @@ export async function POST(req:Request){
   const rows:any[]=[{id:rootId,source_id:sourceId,parent_id:null,node_type:"root",title:sourceTitle,depth:0,source_page:1,source_order:0,is_leaf:false,status:"active"}];
   const parentByPath=new Map<string,string>();
   parentByPath.set("",rootId);
+  const rowByPath=new Map<string,any>();
   let rowOrder=1;
+
+  // Create every intermediate hierarchy node explicitly.
+  // This guarantees Subject -> Section -> Topic -> Subtopic -> Micro-topic
+  // is preserved even when the PDF only contains markers on leaf entries.
   for(const item of normalized){
    const path=item.path as string[];
    if(!path.length)continue;
-   const title=path[path.length-1];
-   const depth=path.length;
-   const parentPath=path.slice(0,-1).join("\u001f");
-   const parent=parentByPath.get(parentPath)||rootId;
-   const keyPath=path.join("\u001f");
-   if(parentByPath.has(keyPath))continue;
-   const id=crypto.randomUUID();
-   const node_type=item.leaf?"micro_topic":depth===1?"subject":depth===2?"section":depth===3?"topic":depth===4?"subtopic":"micro_detail";
-   rows.push({id,source_id:sourceId,parent_id:parent,title,depth,node_type,source_page:item.page,source_order:rowOrder++,is_leaf:item.leaf,status:"active"});
-   parentByPath.set(keyPath,id);
+   let parentId=rootId;
+   const built:string[]=[];
+   for(let i=0;i<path.length;i++){
+    const title=path[i];
+    built.push(title);
+    const keyPath=built.join("\u001f");
+    let row=rowByPath.get(keyPath);
+    if(!row){
+     const depth=i+1;
+     const isFinal=i===path.length-1;
+     const node_type=depth===1?"subject":depth===2?"section":depth===3?"topic":depth===4?"subtopic":"micro_detail";
+     row={id:crypto.randomUUID(),source_id:sourceId,parent_id:parentId,title,depth,node_type,source_page:item.page,source_order:rowOrder++,is_leaf:isFinal&&!!item.leaf,status:"active"};
+     rows.push(row);
+     rowByPath.set(keyPath,row);
+     parentByPath.set(keyPath,row.id);
+    }else if(i===path.length-1&&item.leaf){
+     row.is_leaf=true;
+     row.node_type="micro_topic";
+    }else{
+     row.is_leaf=false;
+    }
+    parentId=row.id;
+   }
   }
 
   const oldResult=await s.from("ai_study_syllabus_sources").select("id").eq("source_file_name",f.name).eq("status","active");
