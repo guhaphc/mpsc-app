@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
-import {PDFParser} from "pdf2json";
+const PDFParser = require("pdf2json");
 
 export const runtime="nodejs";
 export const maxDuration=300;
@@ -68,20 +68,24 @@ function sectionAt(page:number,side:"left"|"right",y:number,base:string|null){
  }
  return base;
 }
-async function extractColumn(page:any,side:"left"|"right",pageNo:number){
- const content=await page.getTextContent();
- const viewport=page.getViewport({scale:1});
- const mid=viewport.width/2;
- const items=(content.items as any[]).filter(x=>typeof x.str==="string"&&x.str.trim()).map(x=>({
-  str:String(x.str),x:Number(x.transform?.[4]??0),y:Number(viewport.height-(x.transform?.[5]??0))
- })).filter(x=>(side==="left"?x.x<mid:x.x>=mid)&&x.y>35&&x.y<viewport.height-25);
- const lines:{y:number,parts:{str:string,x:number}[]}[]=[];
- for(const item of items.sort((a,b)=>a.y-b.y||a.x-b.x)){
+function extractColumn(page:any,side:"left"|"right",pageNo:number){
+ const width=Number(page.Width||page.w||0);
+ const mid=width/2;
+ const items=(page.Texts||[]).flatMap((t:any)=>{
+  let text="";
+  for(const r of (t.R||[])){
+   const raw=String(r.T||"");
+   try{text+=decodeURIComponent(raw);}catch{text+=raw;}
+  }
+  return [{text,x:Number(t.x||0),y:Number(t.y||0)}];
+ }).filter((x:any)=>x.text.trim()&&(side==="left"?x.x<mid:x.x>=mid));
+ const lines:{y:number,parts:{text:string,x:number}[]}[]=[];
+ for(const item of items.sort((a:any,b:any)=>a.y-b.y||a.x-b.x)){
   const last=lines[lines.length-1];
-  if(!last||Math.abs(last.y-item.y)>5) lines.push({y:item.y,parts:[item]});
+  if(!last||Math.abs(last.y-item.y)>0.35)lines.push({y:item.y,parts:[item]});
   else last.parts.push(item);
  }
- return lines.map(line=>({y:line.y,text:line.parts.sort((a,b)=>a.x-b.x).map(x=>x.str).join(" ")}));
+ return lines.map(line=>({y:line.y,text:line.parts.sort((a,b)=>a.x-b.x).map(x=>x.text).join(" ")}));
 }
 function parseColumn(lines:{y:number,text:string}[],pageNo:number,side:"left"|"right",base:string|null){
  const out:{title:string,marker:string,page:number,section:string|null,y:number}[]=[];
