@@ -2,7 +2,7 @@ import {redirect} from "next/navigation";
 import {createClient} from "@/lib/supabase/server";
 
 const cards=[
- ["📚","Study Material","Create, organize, edit and publish MPSC notes and PDFs.","/teacher/study-material"],
+ ["📚","Study Material","Build syllabus-driven AI Study Notes from the approved Micro Syllabus.","/teacher/study-material"],
  ["📰","Current Affairs","Create and publish exam-focused current affairs.","/teacher/current-affairs"],
  ["📝","Prelims Test Series","Create MCQs, explanations, difficulty and test sets.","/teacher/prelims-tests"],
  ["✍️","Mains Test Series","Create questions, marks, word limits and model-answer points.","/teacher/mains-tests"],
