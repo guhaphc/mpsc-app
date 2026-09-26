@@ -9,7 +9,7 @@ export default async function StudyMaterial(){
  const {data:profile}=await supabase.from("profiles").select("full_name,role,account_status").eq("id",data.claims.sub).single();
  if(!profile||profile.role!=="student")redirect("/dashboard");
  if(profile.account_status!=="active")redirect("/dashboard");
- const {data:subjects,error}=await supabase.from("study_subjects").select("id,subject_name,stage,paper,updated_at").eq("status","published").order("subject_name");
+ const {data:subjects,error}=await supabase.from("study_subjects").select("id,subject_name,stage,paper,updated_at").eq("status","published").eq("content_area","teacher").order("subject_name");
  return <div className="shell">
   <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">STUDY MATERIAL</div></div><Link className="btn secondary" href="/dashboard">Back</Link></header>
   <main className="main">
