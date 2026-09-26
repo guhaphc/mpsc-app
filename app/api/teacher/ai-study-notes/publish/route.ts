@@ -50,6 +50,9 @@ Keywords: ${JSON.stringify(missing)}`;
    }
   }
   const {error}=await supabase.from("study_topics").update({status:"published",updated_at:new Date().toISOString()}).eq("id",topicId);
-  if(error)throw new Error(error.message); return NextResponse.json({ok:true,status:"published"});
+  if(error)throw new Error(error.message);
+  const {error:subjectPublishError}=await supabase.from("study_subjects").update({status:"published",updated_at:new Date().toISOString()}).eq("id",topic.subject_id).eq("content_area","ai_notes");
+  if(subjectPublishError)throw new Error(subjectPublishError.message);
+  return NextResponse.json({ok:true,status:"published"});
  }catch(e:any){return NextResponse.json({error:e?.message||"Could not publish AI notes."},{status:500});}
 }
