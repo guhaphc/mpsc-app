@@ -40,7 +40,7 @@ export default function NoteWorkspace(){
   else openNewDraft();
  }
  function openNewDraft(){
-  setSelected(null);setIsNew(true);setEditing(true);setTitle(d.node?.title||"");setOverview("");setHtml("");setMsg("");setErr("");
+  setSelected(null);setIsNew(true);setEditing(true);setTitle(node?.title||"");setOverview("");setHtml("");setMsg("");setErr("");
   setTimeout(()=>{if(editor.current)editor.current.innerHTML=""},0);
  }
  function selectNote(n:Note){
@@ -53,7 +53,6 @@ export default function NoteWorkspace(){
 
  async function formatAI(){
   const source=editor.current?.innerText||html.replace(/<[^>]+>/g," ").trim();
-  if(!source.trim())return setErr("There is no text to format.");
   if(!source.trim())return setErr("There is no text to format.");
   setBusy(true);setErr("");setMsg("");
   try{
