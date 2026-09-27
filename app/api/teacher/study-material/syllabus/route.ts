@@ -74,6 +74,32 @@ function sectionAt(page:number,side:"left"|"right",y:number,base:string|null){
  }
  return base;
 }
+function extractFullPage(page:any,pageNo:number){
+ const items=(page.Texts||[]).flatMap((t:any)=>{
+  let text="";
+  for(const r of (t.R||[])) text+=String(r.T||"");
+  return [{text,x:Number(t.x||0),y:Number(t.y||0)}];
+ }).filter((x:any)=>{
+  const v=String(x.text||"").trim();
+  return v&&!/www\\.iasscore\\.in/i.test(v)&&!/^\\d+\\s+UPSC\\s+SYLLABUS/i.test(v);
+ });
+ const lines:{y:number,parts:{text:string,x:number}[]}[]=[];
+ for(const item of items.sort((a:any,b:any)=>a.y-b.y||a.x-b.x)){
+  const last=lines[lines.length-1];
+  if(!last||Math.abs(last.y-item.y)>0.35)lines.push({y:item.y,parts:[item]});
+  else last.parts.push(item);
+ }
+ return lines.map(line=>({y:line.y,text:line.parts.sort((a,b)=>a.x-b.x).map(x=>x.text).join(" ")}));
+}
+function historySectionForPage(page:number){
+ if(page<=1)return "ANCIENT HISTORY";
+ if(page<=4)return "MEDIEVAL HISTORY";
+ if(page===5)return "MODERN HISTORY";
+ if(page<=7)return "POST INDEPENDENCE CONSOLIDATION";
+ if(page===8)return "WORLD HISTORY";
+ if(page<=10)return "INDIAN CULTURE";
+ return "CONTEMPORARY ISSUES";
+}
 function extractColumn(page:any,side:"left"|"right",pageNo:number){
  const width=Number(page.Width||page.w||0);
  const mid=width/2;
@@ -150,12 +176,19 @@ export async function POST(req:Request){
   const pageCount=pages.length;
   if(!pageCount)throw new Error("The PDF contains no readable pages.");
   const parsed:any[]=[];
+  const isHistorySource=/history/i.test(f.name);
   for(let pageNo=1;pageNo<=pageCount;pageNo++){
    const page=pages[pageNo-1];
-   const base=defaultSection(pageNo);
-   for(const side of ["left","right"] as const){
-    const lines=extractColumn(page,side,pageNo);
-    parsed.push(...parseColumn(lines,pageNo,side,base).map(x=>({...x,side})));
+   if(isHistorySource){
+    const base=historySectionForPage(pageNo);
+    const lines=extractFullPage(page,pageNo);
+    parsed.push(...parseColumn(lines,pageNo,"left",base).map(x=>({...x,side:"left"})));
+   }else{
+    const base=defaultSection(pageNo);
+    for(const side of ["left","right"] as const){
+     const lines=extractColumn(page,side,pageNo);
+     parsed.push(...parseColumn(lines,pageNo,side,base).map(x=>({...x,side})));
+    }
    }
   }
   parsed.sort((a,b)=>a.page-b.page||(a.side===b.side?a.y-b.y:(a.side==="left"?-1:1)));
@@ -164,7 +197,7 @@ export async function POST(req:Request){
   const seen=new Set<string>();
   let order=0;
   for(const item of parsed){
-   const subject=subjectForPage(item.page);
+   const subject=isHistorySource ? "HISTORY" : subjectForPage(item.page);
    const stack=stacks.get(subject)||[];
    const markerLevel=MARKERS.get(item.marker)??1;
    while(stack.length&&stack[stack.length-1].level>=markerLevel)stack.pop();
