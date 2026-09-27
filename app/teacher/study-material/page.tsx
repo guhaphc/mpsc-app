@@ -1,56 +1,237 @@
 "use client";
-import {useEffect,useState} from "react";
-import Link from "next/link";
-import {createClient} from "@/lib/supabase/client";
 
-type Node={id:string,parent_id:string|null,node_type:string,title:string,depth:number,source_page:number,source_order:number,is_leaf:boolean};
-export default function TeacherStudyMaterial(){
- const [nodes,setNodes]=useState<Node[]>([]),[loading,setLoading]=useState(true),[file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState(""),[err,setErr]=useState("");
- const [expanded,setExpanded]=useState<string[]>([]);
- async function load(){setLoading(true);try{const s=createClient();
-  const {data:sources,error:sourceError}=await s.from("ai_study_syllabus_sources").select("id,source_file_name,created_at").eq("status","active").order("created_at",{ascending:false});
-  if(sourceError)throw sourceError;
-  const master=sources?.find((x:any)=>!/(^|[^a-z])history([^a-z]|$)/i.test(x.source_file_name||""))||null;
-  const history=sources?.find((x:any)=>/(^|[^a-z])history([^a-z]|$)/i.test(x.source_file_name||""))||null;
-  if(!master&&!history){setNodes([]);return;}
-  async function readSource(sourceId:string){const all:Node[]=[];const pageSize=1000;for(let from=0;;from+=pageSize){const {data,error}=await s.from("ai_study_syllabus_nodes").select("id,parent_id,node_type,title,depth,source_page,source_order,is_leaf").eq("source_id",sourceId).order("source_order").range(from,from+pageSize-1);if(error)throw error;const batch=(data||[]) as Node[];all.push(...batch);if(batch.length<pageSize)break;}return all;}
-  const masterNodes=master?await readSource(master.id):[];
-  const historyNodes=history?await readSource(history.id):[];
-  const merged:Node[]=[];
-  const syntheticRoot="merged-syllabus-root";
-  merged.push({id:syntheticRoot,parent_id:null,node_type:"root",title:"AI Study Syllabus",depth:0,source_page:1,source_order:0,is_leaf:false});
-  const addBranch=(sourceNodes:Node[],excludeHistory:boolean)=>{
-   const roots=sourceNodes.filter(n=>n.parent_id===null);
-   const rootIds=new Set(roots.map(n=>n.id));
-   const top=sourceNodes.filter(n=>rootIds.has(n.parent_id||"")&&(!excludeHistory||n.title.trim().toUpperCase()!=="HISTORY"));
-   const chosenHistory=sourceNodes.filter(n=>rootIds.has(n.parent_id||"")&&n.title.trim().toUpperCase()==="HISTORY");
-   const selected=[...top,...(excludeHistory?[]:chosenHistory)];
-   const selectedIds=new Set(selected.map(n=>n.id));
-   const sourceSelected=new Set<string>(selected.map(n=>n.id));
-   const byParent=new Map<string,Node[]>();
-   for(const n of sourceNodes){if(!sourceSelected.has(n.id)){if(!selectedIds.has(n.parent_id||""))continue;} }
-   for(const n of sourceNodes){if(n.parent_id&&selectedIds.has(n.parent_id)){sourceSelected.add(n.id);}}
-   let changed=true;while(changed){changed=false;for(const n of sourceNodes){if(n.parent_id&&sourceSelected.has(n.parent_id)&&!sourceSelected.has(n.id)){sourceSelected.add(n.id);changed=true;}}}
-   const ordered=sourceNodes.filter(n=>sourceSelected.has(n.id)).sort((a,b)=>a.source_order-b.source_order);
-   for(const n of ordered){merged.push({...n,parent_id:n.parent_id&&selectedIds.has(n.parent_id)?n.parent_id:syntheticRoot});}
-  };
-  if(master)addBranch(masterNodes,true);
-  if(history){
-   const roots=historyNodes.filter(n=>n.parent_id===null);const rootIds=new Set(roots.map(n=>n.id));
-   const h=historyNodes.find(n=>rootIds.has(n.parent_id||"")&&n.title.trim().toUpperCase()==="HISTORY");
-   if(h){const ids=new Set<string>([h.id]);let changed=true;while(changed){changed=false;for(const n of historyNodes){if(n.parent_id&&ids.has(n.parent_id)&&!ids.has(n.id)){ids.add(n.id);changed=true;}}}for(const n of historyNodes.filter(n=>ids.has(n.id)).sort((a,b)=>a.source_order-b.source_order)){merged.push({...n,parent_id:n.id===h.id?syntheticRoot:n.parent_id});}}
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+
+type Node = {
+  id: string;
+  parent_id: string | null;
+  node_type: string;
+  title: string;
+  depth: number;
+  source_page: number;
+  source_order: number;
+  is_leaf: boolean;
+};
+
+export default function TeacherStudyMaterial() {
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [sourceName, setSourceName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [expanded, setExpanded] = useState<string[]>([]);
+
+  async function load() {
+    setLoading(true);
+    setErr("");
+    try {
+      const s = createClient();
+      const { data: source, error: sourceError } = await s
+        .from("ai_study_syllabus_sources")
+        .select("id,name,source_file_name,created_at")
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sourceError) throw sourceError;
+      if (!source) {
+        setNodes([]);
+        setSourceName("");
+        return;
+      }
+
+      const all: Node[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await s
+          .from("ai_study_syllabus_nodes")
+          .select("id,parent_id,node_type,title,depth,source_page,source_order,is_leaf")
+          .eq("source_id", source.id)
+          .order("source_order")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const batch = (data || []) as Node[];
+        all.push(...batch);
+        if (batch.length < pageSize) break;
+      }
+      setSourceName(source.name || source.source_file_name || "");
+      setNodes(all);
+    } catch (e: any) {
+      setErr(e?.message || "Could not load syllabus.");
+    } finally {
+      setLoading(false);
+    }
   }
-  setNodes(merged);
- }catch(e:any){setErr(e.message||"Could not load syllabus.");}finally{setLoading(false);}}
- useEffect(()=>{load()},[]);
- const children=(pid:string|null)=>nodes.filter(n=>n.parent_id===pid).sort((a,b)=>a.source_order-b.source_order);
- function toggle(id:string){setExpanded(x=>x.includes(id)?x.filter(v=>v!==id):[...x,id]);}
- async function importSyllabus(){
-  if(!file){setErr("Select the Micro Syllabus PDF first.");return;}
-  if(file.size>50*1024*1024){setErr("PDF must be 50 MB or smaller.");return;}
-  setBusy(true);setErr("");setMsg("");
-  try{const form=new FormData();form.append("file",file);const r=await fetch("/api/teacher/study-material/syllabus",{method:"POST",body:form});const d=await r.json();if(!r.ok)throw new Error(d.error||"Import failed.");setMsg(`Imported ${d.nodes||0} syllabus entries from the source.`);setFile(null);await load();}catch(e:any){setErr(e.message||"Import failed.");}finally{setBusy(false);}
- }
- function Tree({parent,indent=0}:{parent:string|null,indent?:number}){return <div>{children(parent).map(n=><div key={n.id}><div onClick={()=>children(n.id).length&&toggle(n.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 8px",margin:"3px 0",marginLeft:indent*18,border:"1px solid var(--line)",borderRadius:12,background:n.is_leaf?"#fff":"#fbfcfe",cursor:children(n.id).length?"pointer":"default"}}><span style={{width:20}}>{children(n.id).length?(expanded.includes(n.id)?"▾":"▸"):(n.is_leaf?"✓":"•")}</span><div style={{flex:1}}><strong>{n.title}</strong><div className="muted" style={{fontSize:11}}>Level {n.depth} · source page {n.source_page}{n.is_leaf?" · Micro-topic":" "}</div></div>{n.is_leaf&&<span className="badge">NOTE</span>}</div>{expanded.includes(n.id)&&<Tree parent={n.id} indent={indent+1}/>}</div>)}</div>}
- return <div className="shell"><header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">AI STUDY NOTES</div></div><Link className="btn secondary" href="/teacher">Back</Link></header><main className="main"><section className="dashboardHero"><div style={{fontSize:12,fontWeight:800}}>NEW INDEPENDENT MODULE</div><h1 style={{margin:"6px 0",fontSize:27}}>AI Study Notes</h1><p className="muted">Syllabus-driven notes built from the Micro Syllabus. This module uses its own database and does not use the previous AI Notes system.</p></section>{err&&<div className="error" style={{marginBottom:14}}>{err}</div>}{msg&&<div className="success" style={{marginBottom:14}}>{msg}</div>}<section className="card"><h2>1. Import Master / Micro Syllabus</h2><p className="muted">Upload the exact source PDF. The system extracts its hierarchy and preserves source order and page references.</p><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<p className="success" style={{marginTop:10}}>✓ {file.name}</p>}<div style={{marginTop:12}}><button className="btn primary" onClick={importSyllabus} disabled={busy||!file}>{busy?"IMPORTING…":"IMPORT SYLLABUS"}</button></div></section><section className="card"><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}><div><h2 style={{marginBottom:4}}>2. Syllabus Hierarchy</h2><p className="muted" style={{margin:0}}>{nodes.length?nodes.length+" entries imported":"No syllabus imported yet."}</p></div><button className="btn secondary small" onClick={load} disabled={loading}>↻ REFRESH</button></div>{loading?<p className="muted" style={{marginTop:16}}>Loading…</p>:nodes.length?<div style={{marginTop:14}}><Tree parent={null}/></div>:<p className="muted" style={{marginTop:16}}>Import the Micro Syllabus to create the exact hierarchy.</p>}</section></main><nav className="bottomNav"><Link href="/teacher">⌂<span>Home</span></Link><Link href="/teacher/study-material">▣<span>AI Notes</span></Link><Link href="/teacher">◉<span>Tests</span></Link><Link href="/teacher">•••<span>More</span></Link></nav></div>;
+
+  useEffect(() => { load(); }, []);
+
+  const children = (parentId: string | null) =>
+    nodes.filter(n => n.parent_id === parentId).sort((a, b) => a.source_order - b.source_order);
+
+  function toggle(id: string) {
+    setExpanded(x => x.includes(id) ? x.filter(v => v !== id) : [...x, id]);
+  }
+
+  async function importSyllabus() {
+    if (!file) {
+      setErr("Select the authoritative syllabus JSON file or PDF first.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setErr("File must be 50 MB or smaller.");
+      return;
+    }
+
+    const isJson = /\.json$/i.test(file.name);
+    setBusy(true);
+    setErr("");
+    setMsg("");
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const endpoint = isJson
+        ? "/api/teacher/study-material/syllabus/json"
+        : "/api/teacher/study-material/syllabus";
+
+      const r = await fetch(endpoint, { method: "POST", body: form });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Import failed.");
+
+      setMsg(
+        isJson
+          ? `Imported the authoritative JSON hierarchy: ${d.nodes} nodes, ${d.leaves} leaf topics.`
+          : `Imported ${d.nodes || 0} syllabus entries from the PDF.`
+      );
+      setFile(null);
+      await load();
+    } catch (e: any) {
+      setErr(e?.message || "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function Tree({ parent, indent = 0 }: { parent: string | null; indent?: number }) {
+    return (
+      <div>
+        {children(parent).map(n => {
+          const childCount = children(n.id).length;
+          return (
+            <div key={n.id}>
+              <div
+                onClick={() => childCount && toggle(n.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 8px",
+                  margin: "3px 0",
+                  marginLeft: indent * 18,
+                  border: "1px solid var(--line)",
+                  borderRadius: 12,
+                  background: n.is_leaf ? "#fff" : "#fbfcfe",
+                  cursor: childCount ? "pointer" : "default",
+                }}
+              >
+                <span style={{ width: 20 }}>
+                  {childCount ? (expanded.includes(n.id) ? "▾" : "▸") : (n.is_leaf ? "✓" : "•")}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <strong>{n.title}</strong>
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {n.node_type} · level {n.depth} · source page {n.source_page}
+                  </div>
+                </div>
+                {n.is_leaf && <span className="badge">NOTE</span>}
+              </div>
+              {expanded.includes(n.id) && <Tree parent={n.id} indent={indent + 1} />}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="shell">
+      <header className="topbar">
+        <div className="topbarBrand">
+          <img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE" />
+          <div className="brandSub">AI STUDY NOTES</div>
+        </div>
+        <Link className="btn secondary" href="/teacher">Back</Link>
+      </header>
+
+      <main className="main">
+        <section className="dashboardHero">
+          <div style={{ fontSize: 12, fontWeight: 800 }}>NEW INDEPENDENT MODULE</div>
+          <h1 style={{ margin: "6px 0", fontSize: 27 }}>AI Study Notes</h1>
+          <p className="muted">
+            This is the new independent AI Study Notes system. It does not use the previous AI Notes Generation system.
+          </p>
+        </section>
+
+        {err && <div className="error" style={{ marginBottom: 14 }}>{err}</div>}
+        {msg && <div className="success" style={{ marginBottom: 14 }}>{msg}</div>}
+
+        <section className="card">
+          <h2>1. Import authoritative syllabus hierarchy</h2>
+          <p className="muted">
+            Use the generated Complete Hierarchy JSON to preserve the exact parent-child structure.
+            PDF import remains available as a fallback.
+          </p>
+          <input
+            type="file"
+            accept=".json,.pdf,application/json,application/pdf"
+            onChange={e => setFile(e.target.files?.[0] || null)}
+          />
+          {file && (
+            <p className="success" style={{ marginTop: 10 }}>
+              ✓ {file.name} {/\.json$/i.test(file.name) ? "· JSON hierarchy import" : "· PDF parser import"}
+            </p>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <button className="btn primary" onClick={importSyllabus} disabled={busy || !file}>
+              {busy ? "IMPORTING…" : "IMPORT SYLLABUS"}
+            </button>
+          </div>
+        </section>
+
+        <section className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div>
+              <h2 style={{ marginBottom: 4 }}>2. Exact Syllabus Hierarchy</h2>
+              <p className="muted" style={{ margin: 0 }}>
+                {sourceName ? sourceName + " · " + nodes.length + " nodes" : "No syllabus imported yet."}
+              </p>
+            </div>
+            <button className="btn secondary small" onClick={load} disabled={loading}>↻ REFRESH</button>
+          </div>
+
+          {loading ? (
+            <p className="muted" style={{ marginTop: 16 }}>Loading…</p>
+          ) : nodes.length ? (
+            <div style={{ marginTop: 14 }}><Tree parent={null} /></div>
+          ) : (
+            <p className="muted" style={{ marginTop: 16 }}>
+              Import the authoritative JSON hierarchy to create the exact syllabus tree.
+            </p>
+          )}
+        </section>
+      </main>
+
+      <nav className="bottomNav">
+        <Link href="/teacher">⌂<span>Home</span></Link>
+        <Link href="/teacher/study-material">▣<span>AI Notes</span></Link>
+        <Link href="/teacher">◉<span>Tests</span></Link>
+        <Link href="/teacher">•••<span>More</span></Link>
+      </nav>
+    </div>
+  );
 }
