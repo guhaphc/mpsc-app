@@ -225,7 +225,10 @@ export async function POST(req:Request){
 
   const sourceTitle=String(f.name).replace(/\.pdf$/i,"").replace(/[_-]+/g," ").trim()||"Master Syllabus";
   const exam=/UPSC/i.test(f.name)?"UPSC":"MPSC";
-  const year=(f.name.match(/20\d{2}[-–]\d{2}/)?.[0]||"").replace("–","-")||null;
+  // The syllabus source table requires an academic year. Separate subject PDFs
+  // such as "history syallabus.pdf" do not contain the year in their filename,
+  // so they use the current project syllabus year.
+  const year=(f.name.match(/20\d{2}[-–]\d{2}/)?.[0]||"").replace("–","-")||"2026-27";
   const {data:src,error:srcErr}=await s.from("ai_study_syllabus_sources").insert({
    name:sourceTitle,exam,academic_year:year,source_file_name:f.name,source_pages:pageCount,storage_path:storagePath,status:"active",created_by:p.id
   }).select("id").single();
