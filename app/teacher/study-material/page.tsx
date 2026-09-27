@@ -32,21 +32,13 @@ export default function TeacherStudyMaterial(){
    for(const n of sourceNodes){if(n.parent_id&&selectedIds.has(n.parent_id)){sourceSelected.add(n.id);}}
    let changed=true;while(changed){changed=false;for(const n of sourceNodes){if(n.parent_id&&sourceSelected.has(n.parent_id)&&!sourceSelected.has(n.id)){sourceSelected.add(n.id);changed=true;}}}
    const ordered=sourceNodes.filter(n=>sourceSelected.has(n.id)).sort((a,b)=>a.source_order-b.source_order);
-   const selectedSet=new Set(ordered.map(n=>n.id));
-   for(const n of ordered){
-    // Preserve every original parent relationship. Only the selected top-level
-    // subject nodes are re-parented under the combined synthetic root.
-    const parentIsSelected=n.parent_id?selectedSet.has(n.parent_id):false;
-    merged.push({...n,parent_id:parentIsSelected?n.parent_id:syntheticRoot});
-   }
+   for(const n of ordered){merged.push({...n,parent_id:n.parent_id&&selectedIds.has(n.parent_id)?n.parent_id:syntheticRoot});}
   };
   if(master)addBranch(masterNodes,true);
   if(history){
    const roots=historyNodes.filter(n=>n.parent_id===null);const rootIds=new Set(roots.map(n=>n.id));
    const h=historyNodes.find(n=>rootIds.has(n.parent_id||"")&&n.title.trim().toUpperCase()==="HISTORY");
-   if(h){const ids=new Set<string>([h.id]);let changed=true;while(changed){changed=false;for(const n of historyNodes){if(n.parent_id&&ids.has(n.parent_id)&&!ids.has(n.id)){ids.add(n.id);changed=true;}}}for(const n of historyNodes.filter(n=>ids.has(n.id)).sort((a,b)=>a.source_order-b.source_order)){
-    merged.push({...n,parent_id:n.id===h.id?syntheticRoot:n.parent_id});
-   }}
+   if(h){const ids=new Set<string>([h.id]);let changed=true;while(changed){changed=false;for(const n of historyNodes){if(n.parent_id&&ids.has(n.parent_id)&&!ids.has(n.id)){ids.add(n.id);changed=true;}}}for(const n of historyNodes.filter(n=>ids.has(n.id)).sort((a,b)=>a.source_order-b.source_order)){merged.push({...n,parent_id:n.id===h.id?syntheticRoot:n.parent_id});}}
   }
   setNodes(merged);
  }catch(e:any){setErr(e.message||"Could not load syllabus.");}finally{setLoading(false);}}
