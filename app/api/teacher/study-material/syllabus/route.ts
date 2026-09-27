@@ -91,12 +91,17 @@ function extractFullPage(page:any,pageNo:number){
  }
  return lines.map(line=>({y:line.y,text:line.parts.sort((a,b)=>a.x-b.x).map(x=>x.text).join(" ")}));
 }
-function historySectionForPage(page:number){
- if(page<=1)return "ANCIENT HISTORY";
+function historySectionForPage(page:number,side:"left"|"right"){
+ // The dedicated History PDF is still a two-column document. Section
+ // transitions can occur between columns on the same printed page.
+ if(page===1)return "ANCIENT HISTORY";
+ if(page===2)return side==="left" ? "ANCIENT HISTORY" : "MEDIEVAL HISTORY";
  if(page<=4)return "MEDIEVAL HISTORY";
- if(page===5)return "MODERN HISTORY";
- if(page<=7)return "POST INDEPENDENCE CONSOLIDATION";
+ if(page===5)return side==="left" ? "MEDIEVAL HISTORY" : "MODERN HISTORY";
+ if(page===6)return side==="left" ? "MODERN HISTORY" : "POST INDEPENDENCE CONSOLIDATION";
+ if(page===7)return side==="left" ? "POST INDEPENDENCE CONSOLIDATION" : "WORLD HISTORY";
  if(page===8)return "WORLD HISTORY";
+ if(page===9)return side==="left" ? "WORLD HISTORY" : "INDIAN CULTURE";
  if(page<=10)return "INDIAN CULTURE";
  return "CONTEMPORARY ISSUES";
 }
@@ -180,9 +185,14 @@ export async function POST(req:Request){
   for(let pageNo=1;pageNo<=pageCount;pageNo++){
    const page=pages[pageNo-1];
    if(isHistorySource){
-    const base=historySectionForPage(pageNo);
-    const lines=extractFullPage(page,pageNo);
-    parsed.push(...parseColumn(lines,pageNo,"left",base).map(x=>({...x,side:"left"})));
+    // Keep the two physical columns separate. This is essential on pages
+    // 5, 6, 7 and 9 where the next major History section starts in the
+    // opposite column on the same printed page.
+    for(const side of ["left","right"] as const){
+     const base=historySectionForPage(pageNo,side);
+     const lines=extractColumn(page,side,pageNo);
+     parsed.push(...parseColumn(lines,pageNo,side,base).map(x=>({...x,side})));
+    }
    }else{
     const base=defaultSection(pageNo);
     for(const side of ["left","right"] as const){
