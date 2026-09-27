@@ -60,8 +60,21 @@ export default function NoteWorkspace(){
  }
 
  async function saveDraft(){
-  if(!selected)return;
   const current=editor.current?.innerHTML||html;
+  if(!selected){
+   if(!isNew)return;
+   const plain=editor.current?.innerText?.trim()||"";
+   if(!plain)return setErr("Enter or paste some text before saving.");
+   setSaving(true);setErr("");setMsg("");
+   try{
+    const r=await fetch("/api/teacher/study-material/syllabus/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nodeId:id,text:plain})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error);
+    setMsg("Draft saved.");
+    setIsNew(false);
+    if(d.note)selectNote(d.note); else await load();
+   }catch(e:any){setErr(e.message||"Could not save draft")}finally{setSaving(false)}
+   return;
+  }
   setSaving(true);setErr("");setMsg("");
   try{
    const r=await fetch("/api/teacher/study-material/syllabus/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteId:selected.id,title,overview,content_blocks:[{type:"rich",html:current}],keywords:selected.keywords||[]})});
