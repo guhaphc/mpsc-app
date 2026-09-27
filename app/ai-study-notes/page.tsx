@@ -1,7 +1,7 @@
 import {redirect} from "next/navigation";
 import Link from "next/link";
 import {createClient} from "@/lib/supabase/server";
-import PublishedNotesLibrary from "./PublishedNotesLibrary";
+import PublishedNotesLibrary from "./SyllabusNavigator";
 
 export default async function AIStudyNotes(){
  const s=await createClient();
