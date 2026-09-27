@@ -3,38 +3,34 @@ import Link from "next/link";
 import {useMemo,useState} from "react";
 
 type Node={id:string;parent_id:string|null;node_type:string;title:string;depth:number;source_page:number;source_order:number;is_leaf:boolean};
-export default function SyllabusNavigator({nodes,publishedIds}:{nodes:Node[];publishedIds:string[]}){
+type Published={id:string;node_id:string;title:string;overview:string|null;content_blocks:any;published_at:string|null;version_no:number};
+
+export default function PublishedNotesLibrary({nodes,publishedRows}:{nodes:Node[];publishedRows:Published[]}){
  const [q,setQ]=useState("");
- const published=new Set(publishedIds);
- const byParent=useMemo(()=>{const m=new Map<string|null,Node[]>();for(const n of nodes){const a=m.get(n.parent_id)||[];a.push(n);m.set(n.parent_id,a)}for(const a of m.values())a.sort((x,y)=>x.source_order-y.source_order);return m},[nodes]);
- const descendants=useMemo(()=>{const m=new Map<string,Node[]>();const walk=(id:string):Node[]=>{if(m.has(id))return m.get(id)!;const out=[...(byParent.get(id)||[])];for(const n of [...out])if(!n.is_leaf)out.push(...walk(n.id));m.set(id,out);return out};return walk},[byParent]);
- const matches=(n:Node)=>!q.trim()||n.title.toLowerCase().includes(q.trim().toLowerCase());
- const render=(parent:string|null,level=0):React.ReactNode=>(byParent.get(parent)||[]).map(n=>{
-   const children=byParent.get(n.id)||[], allDesc=descendants(n.id)||[], leafCount=allDesc.filter(x=>x.is_leaf).length;
-   const directPublished= n.is_leaf && published.has(n.id);
-   if(n.is_leaf){
-    if(q && !matches(n))return null;
-    return <Link key={n.id} href={"/ai-study-notes/topic/"+n.id} className="topicRow" style={{textDecoration:"none",color:"inherit",display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",padding:"13px 14px",border:"1px solid var(--line)",borderRadius:14,background:"#fff"}}>
-      <div><strong style={{fontSize:15}}>{n.title}</strong><div className="muted" style={{fontSize:11,marginTop:3}}>Source page {n.source_page} · {directPublished?"✓ Notes available":"Coming soon"}</div></div>
-      <span className="btn outline small" style={{whiteSpace:"nowrap"}}>{directPublished?"OPEN":"VIEW"}</span>
-    </Link>
-   }
-   if(q && !matches(n) && !allDesc.some(x=>matches(x)))return null;
-   return <details key={n.id} open={!!q && (matches(n)||allDesc.some(x=>matches(x)))} style={{marginBottom:8,border:"1px solid var(--line)",borderRadius:15,background:"#fff",overflow:"hidden"}}>
-    <summary style={{cursor:"pointer",padding:"14px 15px",listStyle:"none"}}>
-      <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
-       <div><strong style={{fontSize:level===0?18:16}}>{n.title}</strong><div className="muted" style={{fontSize:11,marginTop:3}}>{leafCount} topics · Source page {n.source_page}</div></div>
-       <span style={{fontSize:18}}>›</span>
-      </div>
-    </summary>
-    <div style={{padding:"0 10px 10px 18px"}}>{render(n.id,level+1)}</div>
-   </details>
- });
+ const byId=useMemo(()=>new Map(nodes.map(n=>[n.id,n])),[nodes]);
+ const published=useMemo(()=>publishedRows.map(note=>{
+   const path:Node[]=[]; let cur=byId.get(note.node_id);
+   while(cur){path.unshift(cur);cur=cur.parent_id?byId.get(cur.parent_id):undefined}
+   return {note,path,subject:path[0]?.title||"Other"};
+ }),[publishedRows,byId]);
+ const subjects=useMemo(()=>{
+   const m=new Map<string,{title:string,items:typeof published}>();
+   for(const item of published){const e=m.get(item.subject)||{title:item.subject,items:[]};e.items.push(item);m.set(item.subject,e)}
+   return [...m.values()];
+ },[published]);
+ const query=q.trim().toLowerCase();
+ const filtered=subjects.map(s=>({...s,items:s.items.filter(x=>!query||x.note.title.toLowerCase().includes(query)||x.path.some(n=>n.title.toLowerCase().includes(query)))})).filter(s=>s.items.length);
  return <div>
-   <div style={{position:"sticky",top:0,zIndex:3,background:"var(--bg,#fff)",padding:"4px 0 12px"}}>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search syllabus or notes" aria-label="Search syllabus or notes" style={{width:"100%",padding:"13px 15px",borderRadius:14,border:"1px solid var(--line)",fontSize:15}}/>
-   </div>
-   <div style={{display:"grid",gap:8}}>{render(null)}</div>
-   {q&&!nodes.some(n=>matches(n))&&<div className="card" style={{marginTop:12}}><strong>No matching topic found</strong><p className="muted">Try a broader syllabus or note name.</p></div>}
+  <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search published notes" aria-label="Search published notes" style={{width:"100%",padding:"13px 15px",borderRadius:14,border:"1px solid var(--line)",fontSize:15,marginBottom:14}}/>
+  {!published.length?<div className="card"><h3>No published notes yet</h3><p className="muted">Published notes from teachers will appear here.</p></div>:
+   !filtered.length?<div className="card"><strong>No published note found</strong><p className="muted">Try another note, chapter, or subject name.</p></div>:
+   <div style={{display:"grid",gap:12}}>{filtered.map(s=><section key={s.title} style={{border:"1px solid var(--line)",borderRadius:16,overflow:"hidden",background:"#fff"}}>
+    <div style={{padding:"14px 15px",borderBottom:"1px solid var(--line)",background:"var(--bg,#fff)"}}><strong style={{fontSize:18}}>{s.title}</strong><div className="muted" style={{fontSize:12,marginTop:3}}>{s.items.length} published {s.items.length===1?"note":"notes"}</div></div>
+    <div style={{display:"grid",gap:8,padding:10}}>{s.items.map(({note,path})=><Link key={note.id} href={"/ai-study-notes/topic/"+note.node_id} style={{textDecoration:"none",color:"inherit",padding:"12px 13px",border:"1px solid var(--line)",borderRadius:13,display:"block"}}>
+      <strong style={{fontSize:15}}>{note.title||path[path.length-1]?.title}</strong>
+      <div className="muted" style={{fontSize:11,marginTop:4}}>{path.slice(1,-1).map(n=>n.title).join(" › ")||s.title}</div>
+      <div style={{fontSize:12,marginTop:7,fontWeight:700}}>OPEN NOTE →</div>
+    </Link>)}</div>
+   </section>)}</div>}
  </div>
 }
