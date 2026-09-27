@@ -29,9 +29,14 @@ export default function NoteWorkspace(){
   const d=await r.json();
   if(!r.ok)throw new Error(d.error);
   setNode(d.node);
-  setNotes(d.notes||[]);
-  // Important: do NOT auto-open an existing draft.
-  // The teacher must explicitly choose UPDATE EXISTING DRAFT.
+  const loadedNotes=(d.notes||[]) as Note[];
+  setNotes(loadedNotes);
+  // Open the saved draft automatically. If none exists, show the published
+  // note read-only so the teacher can explicitly unpublish it before editing.
+  const draft=loadedNotes.find(n=>n.status==="draft");
+  const published=loadedNotes.find(n=>n.status==="published");
+  if(draft) selectNote(draft);
+  else if(published) selectNote(published);
  }
  function selectNote(n:Note){
   setSelected(n);setTitle(n.title);setOverview(n.overview||"");
@@ -74,7 +79,7 @@ export default function NoteWorkspace(){
     if(!confirm("Delete this draft?")){setBusy(false);return}
     const r=await fetch("/api/teacher/study-material/syllabus/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteId:selected.id})});
     const d=await r.json();if(!r.ok)throw new Error(d.error);
-    setSelected(null);setText("");setMsg("Draft deleted.");await load();
+    setSelected(null);setMsg("Draft deleted.");await load();
    }else{
     const r=await fetch("/api/teacher/study-material/syllabus/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteId:selected.id,action:type})});
     const d=await r.json();if(!r.ok)throw new Error(d.error);
@@ -93,9 +98,21 @@ export default function NoteWorkspace(){
   }catch(e:any){setErr(e.message||"Action failed")}finally{setBusy(false)}
  }
 
- function command(cmd:string,value?:string){editor.current?.focus();document.execCommand(cmd,false,value);setHtml(editor.current?.innerHTML||"");}
-
- const existingDraft=notes.find(n=>n.status==="draft");
+ function command(cmd:string,value?:string){
+  if(!editing)return;
+  editor.current?.focus();
+  document.execCommand(cmd,false,value);
+  setHtml(editor.current?.innerHTML||"");
+ }
+ function clearEditor(){
+  if(!selected||selected.status!=="draft"||!editing)return;
+  if(!confirm("Clear the current editor? The saved draft will remain unchanged until you press Save Draft."))return;
+  if(editor.current)editor.current.innerHTML="";
+  setHtml("");
+ }
+ function beginEdit(){
+  if(selected?.status==="draft")setEditing(true);
+ }
 
  return <div className="shell">
   <header className="topbar"><div className="topbarBrand"><img src="/mpsc-logo.png" className="brandLogo dashboardLogo" alt="MPSC ALL-IN-ONE"/><div className="brandSub">AI STUDY NOTES</div></div><Link className="btn secondary" href="/teacher/study-material">Back</Link></header>
@@ -128,7 +145,8 @@ export default function NoteWorkspace(){
        <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h2")}>H2</button>
        <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h3")}>H3</button>
       </div>
-      <div ref={editor} contentEditable suppressContentEditableWarning onInput={()=>setHtml(editor.current?.innerHTML||"")} style={{minHeight:360,padding:14,lineHeight:1.8,outline:"none"}}/>
+      </div>}
+      <div ref={editor} contentEditable={editing} suppressContentEditableWarning onInput={()=>setHtml(editor.current?.innerHTML||"")} style={{minHeight:360,padding:14,lineHeight:1.8,outline:"none",background:editing?"#fff":"#fafafa"}}/>
     </div>}
 
     {selected.status!=="draft"&&<div style={{padding:"14px 0",lineHeight:1.8}} dangerouslySetInnerHTML={{__html:html}}/>}
