@@ -1,11 +1,12 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 
-const allowed=new Set(["heading","subheading","paragraph","bullet","numbered","callout","table"]);
+const allowed=new Set(["heading","subheading","paragraph","bullet","numbered","callout","table","rich"]);
 function cleanBlocks(v:any){
  if(!Array.isArray(v))return [];
  return v.map((b:any)=>{
   const type=allowed.has(String(b?.type))?String(b.type):"paragraph";
+  if(type==="rich")return {type,html:String(b?.html||"")};
   if(type==="table")return {type,columns:Array.isArray(b.columns)?b.columns.map(String):[],rows:Array.isArray(b.rows)?b.rows.map((r:any)=>Array.isArray(r)?r.map(String):[]):[]};
   if(type==="bullet"||type==="numbered")return {type,items:Array.isArray(b.items)?b.items.map(String):[]};
   return {type,text:String(b?.text||"")};
@@ -18,8 +19,7 @@ export async function POST(req:Request){
   if(!data?.claims)return NextResponse.json({error:"Login required."},{status:401});
   const {data:p}=await s.from("profiles").select("id,role,account_status").eq("id",data.claims.sub).single();
   if(!p||p.role!=="teacher"||p.account_status!=="active")return NextResponse.json({error:"Only active teachers can edit notes."},{status:403});
-  const b=await req.json();
-  const noteId=String(b.noteId||"");
+  const b=await req.json(),noteId=String(b.noteId||"");
   if(!noteId)return NextResponse.json({error:"Note is required."},{status:400});
   const {data:n,error:ne}=await s.from("ai_study_note_versions").select("id,node_id,status").eq("id",noteId).single();
   if(ne||!n)return NextResponse.json({error:"Note not found."},{status:404});
