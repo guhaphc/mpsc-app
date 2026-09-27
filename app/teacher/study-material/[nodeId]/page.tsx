@@ -144,7 +144,6 @@ export default function NoteWorkspace(){
        <select onChange={e=>command("foreColor",e.target.value)} defaultValue=""><option value="" disabled>Text colour</option><option value="#111827">Black</option><option value="#b91c1c">Red</option><option value="#1d4ed8">Blue</option><option value="#15803d">Green</option></select>
        <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h2")}>H2</button>
        <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h3")}>H3</button>
-      </div>
       </div>}
       <div ref={editor} contentEditable={editing} suppressContentEditableWarning onInput={()=>setHtml(editor.current?.innerHTML||"")} style={{minHeight:360,padding:14,lineHeight:1.8,outline:"none",background:editing?"#fff":"#fafafa"}}/>
     </div>}
