@@ -7,7 +7,41 @@ type Node={id:string,parent_id:string|null,node_type:string,title:string,depth:n
 export default function TeacherStudyMaterial(){
  const [nodes,setNodes]=useState<Node[]>([]),[loading,setLoading]=useState(true),[file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState(""),[err,setErr]=useState("");
  const [expanded,setExpanded]=useState<string[]>([]);
- async function load(){setLoading(true);try{const s=createClient();const {data:source,error:sourceError}=await s.from("ai_study_syllabus_sources").select("id").eq("status","active").order("created_at",{ascending:false}).limit(1).maybeSingle();if(sourceError)throw sourceError;if(!source){setNodes([]);return;}const all:Node[]=[];const pageSize=1000;for(let from=0;;from+=pageSize){const {data,error}=await s.from("ai_study_syllabus_nodes").select("id,parent_id,node_type,title,depth,source_page,source_order,is_leaf").eq("source_id",source.id).order("source_order").range(from,from+pageSize-1);if(error)throw error;const batch=(data||[]) as Node[];all.push(...batch);if(batch.length<pageSize)break;}setNodes(all);}catch(e:any){setErr(e.message||"Could not load syllabus.");}finally{setLoading(false);}}
+ async function load(){setLoading(true);try{const s=createClient();
+  const {data:sources,error:sourceError}=await s.from("ai_study_syllabus_sources").select("id,source_file_name,created_at").eq("status","active").order("created_at",{ascending:false});
+  if(sourceError)throw sourceError;
+  const master=sources?.find((x:any)=>!/(^|[^a-z])history([^a-z]|$)/i.test(x.source_file_name||""))||null;
+  const history=sources?.find((x:any)=>/(^|[^a-z])history([^a-z]|$)/i.test(x.source_file_name||""))||null;
+  if(!master&&!history){setNodes([]);return;}
+  async function readSource(sourceId:string){const all:Node[]=[];const pageSize=1000;for(let from=0;;from+=pageSize){const {data,error}=await s.from("ai_study_syllabus_nodes").select("id,parent_id,node_type,title,depth,source_page,source_order,is_leaf").eq("source_id",sourceId).order("source_order").range(from,from+pageSize-1);if(error)throw error;const batch=(data||[]) as Node[];all.push(...batch);if(batch.length<pageSize)break;}return all;}
+  const masterNodes=master?await readSource(master.id):[];
+  const historyNodes=history?await readSource(history.id):[];
+  const merged:Node[]=[];
+  const syntheticRoot="merged-syllabus-root";
+  merged.push({id:syntheticRoot,parent_id:null,node_type:"root",title:"AI Study Syllabus",depth:0,source_page:1,source_order:0,is_leaf:false});
+  const addBranch=(sourceNodes:Node[],excludeHistory:boolean)=>{
+   const roots=sourceNodes.filter(n=>n.parent_id===null);
+   const rootIds=new Set(roots.map(n=>n.id));
+   const top=sourceNodes.filter(n=>rootIds.has(n.parent_id||"")&&(!excludeHistory||n.title.trim().toUpperCase()!=="HISTORY"));
+   const chosenHistory=sourceNodes.filter(n=>rootIds.has(n.parent_id||"")&&n.title.trim().toUpperCase()==="HISTORY");
+   const selected=[...top,...(excludeHistory?[]:chosenHistory)];
+   const selectedIds=new Set(selected.map(n=>n.id));
+   const sourceSelected=new Set<string>(selected.map(n=>n.id));
+   const byParent=new Map<string,Node[]>();
+   for(const n of sourceNodes){if(!sourceSelected.has(n.id)){if(!selectedIds.has(n.parent_id||""))continue;} }
+   for(const n of sourceNodes){if(n.parent_id&&selectedIds.has(n.parent_id)){sourceSelected.add(n.id);}}
+   let changed=true;while(changed){changed=false;for(const n of sourceNodes){if(n.parent_id&&sourceSelected.has(n.parent_id)&&!sourceSelected.has(n.id)){sourceSelected.add(n.id);changed=true;}}}
+   const ordered=sourceNodes.filter(n=>sourceSelected.has(n.id)).sort((a,b)=>a.source_order-b.source_order);
+   for(const n of ordered){merged.push({...n,parent_id:n.parent_id&&selectedIds.has(n.parent_id)?n.parent_id:syntheticRoot});}
+  };
+  if(master)addBranch(masterNodes,true);
+  if(history){
+   const roots=historyNodes.filter(n=>n.parent_id===null);const rootIds=new Set(roots.map(n=>n.id));
+   const h=historyNodes.find(n=>rootIds.has(n.parent_id||"")&&n.title.trim().toUpperCase()==="HISTORY");
+   if(h){const ids=new Set<string>([h.id]);let changed=true;while(changed){changed=false;for(const n of historyNodes){if(n.parent_id&&ids.has(n.parent_id)&&!ids.has(n.id)){ids.add(n.id);changed=true;}}}for(const n of historyNodes.filter(n=>ids.has(n.id)).sort((a,b)=>a.source_order-b.source_order)){merged.push({...n,parent_id:n.id===h.id?syntheticRoot:n.parent_id});}}
+  }
+  setNodes(merged);
+ }catch(e:any){setErr(e.message||"Could not load syllabus.");}finally{setLoading(false);}}
  useEffect(()=>{load()},[]);
  const children=(pid:string|null)=>nodes.filter(n=>n.parent_id===pid).sort((a,b)=>a.source_order-b.source_order);
  function toggle(id:string){setExpanded(x=>x.includes(id)?x.filter(v=>v!==id):[...x,id]);}
