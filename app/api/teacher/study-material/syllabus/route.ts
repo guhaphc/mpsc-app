@@ -284,11 +284,18 @@ export async function POST(req:Request){
    }
   }
 
-  const oldResult=await s.from("ai_study_syllabus_sources").select("id").eq("source_file_name",f.name).eq("status","active");
-  const oldRows=oldResult.data??[];
-  for(const x of oldRows){
+  // Keep one active master source and one active History override.
+  // Re-importing either kind replaces only the previous source of that kind.
+  const isHistoryFile=/history/i.test(f.name);
+  const activeSources=await s.from("ai_study_syllabus_sources").select("id,source_file_name").eq("status","active");
+  if(activeSources.error)throw new Error(activeSources.error.message);
+  for(const x of activeSources.data||[]){
    const oldId=x?.id;
-   if(oldId&&oldId!==sourceId)await s.from("ai_study_syllabus_sources").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",oldId);
+   if(!oldId||oldId===sourceId)continue;
+   const oldIsHistory=/history/i.test(x.source_file_name||"");
+   if(oldIsHistory===isHistoryFile){
+    await s.from("ai_study_syllabus_sources").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",oldId);
+   }
   }
   for(let i=0;i<rows.length;i+=500){
    const {error}=await s.from("ai_study_syllabus_nodes").insert(rows.slice(i,i+500));
