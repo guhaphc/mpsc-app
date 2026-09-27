@@ -21,7 +21,7 @@ export default function NoteWorkspace(){
  const[node,setNode]=useState<any>(null),[notes,setNotes]=useState<Note[]>([]),[selected,setSelected]=useState<Note|null>(null);
  const[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[msg,setMsg]=useState(""),[err,setErr]=useState("");
  const[title,setTitle]=useState(""),[overview,setOverview]=useState(""),[html,setHtml]=useState("");
- const[editing,setEditing]=useState(false);
+ const[editing,setEditing]=useState(false),[isNew,setIsNew]=useState(false);
  const editor=useRef<HTMLDivElement>(null);
 
  async function load(){
@@ -37,9 +37,14 @@ export default function NoteWorkspace(){
   const published=loadedNotes.find(n=>n.status==="published");
   if(draft) selectNote(draft);
   else if(published) selectNote(published);
+  else openNewDraft();
+ }
+ function openNewDraft(){
+  setSelected(null);setIsNew(true);setEditing(true);setTitle(d.node?.title||"");setOverview("");setHtml("");setMsg("");setErr("");
+  setTimeout(()=>{if(editor.current)editor.current.innerHTML=""},0);
  }
  function selectNote(n:Note){
-  setSelected(n);setTitle(n.title);setOverview(n.overview||"");
+  setSelected(n);setIsNew(false);setEditing(false);setTitle(n.title);setOverview(n.overview||"");
   const h=blocksToHtml(n.content_blocks||[]);
   setHtml(h);
   setTimeout(()=>{if(editor.current)editor.current.innerHTML=h},0);
@@ -47,15 +52,15 @@ export default function NoteWorkspace(){
  useEffect(()=>{load().catch(e=>setErr(e.message))},[id]);
 
  async function formatAI(){
-  if(!selected)return;
   const source=editor.current?.innerText||html.replace(/<[^>]+>/g," ").trim();
+  if(!source.trim())return setErr("There is no text to format.");
   if(!source.trim())return setErr("There is no text to format.");
   setBusy(true);setErr("");setMsg("");
   try{
-   const r=await fetch("/api/teacher/study-material/syllabus/format",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nodeId:id,noteId:selected.id,text:source,sourceType:"paste-draft"})});
+   const r=await fetch("/api/teacher/study-material/syllabus/format",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nodeId:id,noteId:selected?.id||"",text:source,sourceType:"paste-draft"})});
    const d=await r.json();if(!r.ok)throw new Error(d.error);
    setMsg("AI formatting completed.");
-   if(d.note)selectNote(d.note); else await load();
+   if(d.note){setIsNew(false);selectNote(d.note)} else await load();
   }catch(e:any){setErr(e.message||"AI formatting failed")}finally{setBusy(false)}
  }
 
@@ -71,7 +76,7 @@ export default function NoteWorkspace(){
     const d=await r.json();if(!r.ok)throw new Error(d.error);
     setMsg("Draft saved.");
     setIsNew(false);
-    if(d.note)selectNote(d.note); else await load();
+    if(d.note){setIsNew(false);selectNote(d.note)} else await load();
    }catch(e:any){setErr(e.message||"Could not save draft")}finally{setSaving(false)}
    return;
   }
@@ -135,10 +140,26 @@ export default function NoteWorkspace(){
 
    <section className="dashboardHero"><div>STUDY NOTE</div><h1 style={{margin:"6px 0",fontSize:26}}>{node?.title||"Loading…"}</h1><p className="muted">{node?"Selected final syllabus topic · source page "+node.source_page:""}</p></section>
 
-   {!selected&&<section className="card">
+   {!selected&&isNew&&<section className="card">
     <h2>Draft</h2>
-    <p className="muted">No saved draft exists for this syllabus topic yet.</p>
-    <p className="muted">Create the draft through the existing note-generation/source workflow. This workspace no longer uses a Copy/Paste window.</p>
+    <p className="muted">New note · paste or type your content below.</p>
+    <label>Title</label>
+    <input value={title} onChange={e=>setTitle(e.target.value)} style={{width:"100%",margin:"7px 0 12px"}}/>
+    <div style={{border:"1px solid var(--line)",borderRadius:12,overflow:"hidden",marginTop:10}}>
+     <div style={{display:"flex",gap:4,flexWrap:"wrap",padding:8,background:"#f7f8fa"}}>
+      <button type="button" className="btn small secondary" onClick={()=>command("bold")}><b>B</b></button>
+      <button type="button" className="btn small secondary" onClick={()=>command("italic")}><i>I</i></button>
+      <button type="button" className="btn small secondary" onClick={()=>command("underline")}><u>U</u></button>
+      <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h2")}>H2</button>
+      <button type="button" className="btn small secondary" onClick={()=>command("formatBlock","h3")}>H3</button>
+     </div>
+     <div ref={editor} contentEditable suppressContentEditableWarning onInput={()=>setHtml(editor.current?.innerHTML||"")} style={{minHeight:360,padding:14,lineHeight:1.8,outline:"none",background:"#fff"}}/>
+    </div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+     <button className="btn primary" onClick={formatAI} disabled={busy}>✨ AI FORMAT TEXT</button>
+     <button className="btn secondary" onClick={clearEditor} disabled={busy}>CLEAR</button>
+     <button className="btn secondary" onClick={saveDraft} disabled={saving}>💾 SAVE DRAFT</button>
+    </div>
    </section>}
 
    {selected&&<section className="card">
