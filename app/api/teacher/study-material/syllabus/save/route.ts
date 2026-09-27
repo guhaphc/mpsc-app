@@ -2,7 +2,7 @@ import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 const allowed=new Set(["heading","subheading","paragraph","bullet","numbered","callout","table","rich"]);
 function cleanHtml(v:string){
- return v.replace(/<script[\\s\\S]*?<\\/script>/gi,"").replace(/<style[\\s\\S]*?<\\/style>/gi,"").replace(/<(iframe|object|embed|form)[^>]*>[\\s\\S]*?<\\/\\1>/gi,"").replace(/\\son[a-z]+\\s*=\\s*(['"]).*?\\1/gi,"").replace(/javascript:/gi,"");
+ return v.replace(/<script[\s\S]*?<\\/script>/gi,"").replace(/<style[\s\S]*?<\\/style>/gi,"").replace(/<(iframe|object|embed|form)[^>]*>[\s\S]*?<\\/\\1>/gi,"").replace(/\son[a-z]+\s*=\s*(['"]).*?\\1/gi,"").replace(/javascript:/gi,"");
 }
 function cleanBlocks(v:any){
  if(!Array.isArray(v))return [];
