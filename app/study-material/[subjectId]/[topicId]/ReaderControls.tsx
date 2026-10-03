@@ -17,18 +17,22 @@ function renderRichText(text:string|undefined, keywords:Keyword[]=[]){
 function renderExplanation(text:string){
  const lines=String(text||"").split(/\\n+/).map(x=>x.trim()).filter(Boolean);
  const labels=["Meaning","Key point","MPSC relevance","Quick revision","महत्त्व","मुख्य मुद्दा","MPSC महत्त्व","जलद उजळणी"];
- return <div style={{display:"grid",gap:12}}>
+ return <div style={{display:"grid",gap:18}}>
   {lines.map((line,i)=>{
    const m=line.match(/^([^:]{2,32}):\\s*(.*)$/);
-   const label=m&&labels.some(x=>x.toLowerCase()===m[1].trim().toLowerCase())?m[1].trim():"";
-   const body=label?m![2]:line;
-   return <div key={i} style={{padding:label?"12px 14px":"0",border:label?"1px solid var(--line)":"none",borderRadius:label?14:0,background:label?"rgba(20,70,120,.045)":"transparent"}}>
-    {label&&<div style={{fontSize:13,fontWeight:950,letterSpacing:".04em",textTransform:"none",opacity:.92,marginBottom:6}}>{label}</div>}
-    <div style={{lineHeight:1.78}}>{body}</div>
-   </div>;
+   const exact=labels.find(x=>x.toLowerCase()===line.toLowerCase());
+   const label=exact||((m&&labels.some(x=>x.toLowerCase()===m[1].trim().toLowerCase()))?m![1].trim():"");
+   const body=exact?"":label?m![2]:line;
+   return label
+    ? <section key={i} style={{padding:"14px 16px",border:"1px solid var(--line)",borderRadius:16,background:"rgba(20,70,120,.045)"}}>
+        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:950,lineHeight:1.3}}>{label}</h3>
+        {body&&<div style={{lineHeight:1.78,fontSize:16}}>{body}</div>}
+      </section>
+    : <p key={i} style={{margin:0,lineHeight:1.78,fontSize:16}}>{body}</p>;
   })}
  </div>;
 }
+
 function renderBlocks(blocks:Block[]|undefined,fallback:string,keywords:Keyword[]=[]){
  const list=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
  return list.map((b,i)=>{
