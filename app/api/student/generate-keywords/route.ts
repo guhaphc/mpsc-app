@@ -9,8 +9,8 @@ export const maxDuration=90;
 function cleanKeywords(items:any){
  return (Array.isArray(items)?items:[])
   .map((k:any)=>({term:String(k?.term||"").trim(),category:String(k?.category||"Other"),importance:String(k?.importance||"high")}))
-  .filter((k:any)=>k.term)
-  .slice(0,10);
+  .filter((k:any)=>k.term && k.term.split(/\\s+/).length<=3)
+  .slice(0,8);
 }
 
 export async function POST(request:Request){
@@ -38,7 +38,7 @@ export async function POST(request:Request){
   if(!key)return NextResponse.json({error:"AI service is not configured."},{status:503});
   const ai=new GoogleGenAI({apiKey:key});
   const source=(subs||[]).map((s:any,i:number)=>({index:i,title:s.title,content:s.content}));
-  const prompt=`From the supplied published MPSC study notes, identify 4-10 high-value examination keywords for EACH subtopic. Use ONLY terms explicitly present in the supplied notes. Prioritize rulers/persons, dynasties, places, events/battles, dates/periods, concepts, texts/literature, institutions, art/architecture and important terms. Do not invent facts or use outside knowledge. Avoid generic words. Keep the exact terminology from the notes. Return ONLY valid JSON: {"subtopics":[{"index":0,"keywords":[{"term":"...","category":"Ruler|Dynasty|Personality|Place|Event|Date/Period|Concept|Text/Literature|Art/Architecture|Institution|Other","importance":"high|medium"}]}]}. Notes: ${JSON.stringify(source)}`;
+  const prompt=`From the supplied published MPSC study notes, identify 4-8 high-value examination keywords for EACH subtopic. Use ONLY terms explicitly present in the supplied notes. Each keyword term MUST be very short: ideally 1-2 words and never more than 3 words. Prefer the exact key concept, name, institution, event, date/period or technical term rather than a long phrase. Avoid generic words and avoid full sentences. Prioritize concepts that should be visually bolded in the study text. Do not invent facts or use outside knowledge. Return ONLY valid JSON: {"subtopics":[{"index":0,"keywords":[{"term":"...","category":"Ruler|Dynasty|Personality|Place|Event|Date/Period|Concept|Text/Literature|Art/Architecture|Institution|Other","importance":"high|medium"}]}]}. Notes: ${JSON.stringify(source)}`;
   const response=await ai.models.generateContent({model:MODEL,contents:prompt,config:{responseMimeType:"application/json",maxOutputTokens:12000}});
   let parsed:any={};
   try{parsed=JSON.parse((response.text||"").trim());}catch{parsed={};}
