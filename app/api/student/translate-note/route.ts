@@ -70,7 +70,7 @@ export async function POST(request:Request){
   const {data:subs,error:se}=await userClient.from("study_subtopics").select("id,title,content,content_blocks,marathi_content,marathi_content_blocks,translation_status,sort_order").eq("topic_id",topicId).order("sort_order");
   if(se)throw se;
 
-  const cached=!!subs?.length && subs.every((s:any)=>s.translation_status==="approved"&&String(s.marathi_content||"").trim());
+  const cached=!!subs?.length && subs.every((s:any)=>["draft","approved"].includes(s.translation_status)&&String(s.marathi_content||"").trim());
   if(cached){
     return NextResponse.json({ok:true,cached:true,result:{
       title:topic.title,
