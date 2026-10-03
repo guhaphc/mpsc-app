@@ -67,7 +67,7 @@ export async function POST(request:Request){
 
   const {data:topic,error:te}=await userClient.from("study_topics").select("id,title,notes,content_blocks,translation_status,original_language,marathi_title,marathi_notes,marathi_content_blocks").eq("id",topicId).eq("status","published").single();
   if(te||!topic)return NextResponse.json({error:"Study topic not found."},{status:404});
-  const {data:subs,error:se}=await userClient.from("study_subtopics").select("id,title,content,content_blocks,marathi_title,marathi_content,marathi_content_blocks,translation_status,sort_order").eq("topic_id",topicId).order("sort_order");
+  const {data:subs,error:se}=await userClient.from("study_subtopics").select("id,title,content,content_blocks,marathi_content,marathi_content_blocks,translation_status,sort_order").eq("topic_id",topicId).order("sort_order");
   if(se)throw se;
 
   const cached=!!subs?.length && subs.every((s:any)=>["draft","approved"].includes(s.translation_status)&&String(s.marathi_content||"").trim());
@@ -76,7 +76,7 @@ export async function POST(request:Request){
       title:topic.marathi_title||topic.title,
       notes:topic.marathi_notes||"",
       content_blocks:Array.isArray(topic.marathi_content_blocks)&&topic.marathi_content_blocks.length?topic.marathi_content_blocks:(Array.isArray(topic.content_blocks)?topic.content_blocks:[]),
-      subtopics:(subs||[]).map((s:any)=>({id:s.id,title:s.marathi_title||s.title,content:s.marathi_content||"",content_blocks:Array.isArray(s.marathi_content_blocks)?s.marathi_content_blocks:[]})),
+      subtopics:(subs||[]).map((s:any)=>({id:s.id,title:s.title,content:s.marathi_content||"",content_blocks:Array.isArray(s.marathi_content_blocks)?s.marathi_content_blocks:[]})),
     }});
   }
 
@@ -101,7 +101,6 @@ export async function POST(request:Request){
    const original=(subs||[]).find((s:any)=>s.id===item.id);
    if(!original)continue;
    await writer.from("study_subtopics").update({
-     marathi_title:String(item.title||original.title||""),
      marathi_content:String(item.content||""),
      marathi_content_blocks:cleanBlocks(item.content_blocks),
      translation_status:"draft",
