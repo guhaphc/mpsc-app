@@ -5,17 +5,26 @@ type Keyword={term:string;category:string;importance?:string};
 type Block={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table";text?:string;items?:string[];columns?:string[];rows?:string[][]};
 type Sub={id:string;title:string;content:string;content_blocks?:Block[];important_keywords?:Keyword[];marathi_content?:string;marathi_content_blocks?:Block[];translation_status?:string};
 
-function renderBlocks(blocks:Block[]|undefined,fallback:string){
+function renderRichText(text:string|undefined, keywords:Keyword[]=[]){
+ const value=String(text||"");
+ const terms=[...new Set(keywords.map(k=>String(k.term||"").trim()).filter(Boolean))].sort((a,b)=>b.length-a.length);
+ const escapeRegExp=(s:string)=>s.replace(/[.*+?^\${}()|[\]\\]/g,"\\$&");
+ const pattern=terms.length?new RegExp("("+terms.map(escapeRegExp).join("|")+")","gi"):null;
+ if(!pattern)return value;
+ const parts=value.split(pattern);
+ return parts.map((part,i)=>terms.some(t=>t.toLowerCase()===part.toLowerCase())?<strong key={i}>{part}</strong>:<span key={i}>{part}</span>);
+}
+function renderBlocks(blocks:Block[]|undefined,fallback:string,keywords:Keyword[]=[]){
  const list=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
  return list.map((b,i)=>{
   const key="b-"+i;
-  if(b.type==="heading")return <h2 key={key} style={{margin:"34px 0 12px",fontSize:"clamp(24px,5vw,31px)",lineHeight:1.25,fontWeight:850,letterSpacing:"-.02em"}}>{b.text}</h2>;
-  if(b.type==="subheading")return <h3 key={key} style={{margin:"27px 0 9px",fontSize:"clamp(19px,4vw,23px)",lineHeight:1.35,fontWeight:800}}>{b.text}</h3>;
-  if(b.type==="paragraph")return <p key={key} style={{margin:"0 0 17px",lineHeight:1.9}}>{b.text}</p>;
-  if(b.type==="bullet")return <ul key={key} style={{margin:"4px 0 18px",paddingLeft:24}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{x}</li>)}</ul>;
-  if(b.type==="numbered")return <ol key={key} style={{margin:"4px 0 18px",paddingLeft:27}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{x}</li>)}</ol>;
-  if(b.type==="callout")return <aside key={key} style={{margin:"22px 0",padding:"16px 18px",borderLeft:"4px solid var(--accent)",borderRadius:"0 14px 14px 0",background:"var(--soft)",fontWeight:650,lineHeight:1.75}}>{b.text}</aside>;
-  if(b.type==="table")return <div key={key} style={{overflowX:"auto",margin:"22px 0"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}><thead><tr>{(b.columns||[]).map((x,j)=><th key={j} style={{border:"1px solid var(--line)",padding:"10px",textAlign:"left",fontWeight:800}}>{x}</th>)}</tr></thead><tbody>{(b.rows||[]).map((row,j)=><tr key={j}>{row.map((x,k)=><td key={k} style={{border:"1px solid var(--line)",padding:"10px",verticalAlign:"top",lineHeight:1.55}}>{x}</td>)}</tr>)}</tbody></table></div>;
+  if(b.type==="heading")return <h2 key={key} style={{margin:"34px 0 12px",fontSize:"clamp(24px,5vw,31px)",lineHeight:1.25,fontWeight:850,letterSpacing:"-.02em"}}>{renderRichText(b.text,keywords)}</h2>;
+  if(b.type==="subheading")return <h3 key={key} style={{margin:"27px 0 9px",fontSize:"clamp(19px,4vw,23px)",lineHeight:1.35,fontWeight:800}}>{renderRichText(b.text,keywords)}</h3>;
+  if(b.type==="paragraph")return <p key={key} style={{margin:"0 0 17px",lineHeight:1.9}}>{renderRichText(b.text,keywords)}</p>;
+  if(b.type==="bullet")return <ul key={key} style={{margin:"4px 0 18px",paddingLeft:24}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{renderRichText(x,keywords)}</li>)}</ul>;
+  if(b.type==="numbered")return <ol key={key} style={{margin:"4px 0 18px",paddingLeft:27}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{renderRichText(x,keywords)}</li>)}</ol>;
+  if(b.type==="callout")return <aside key={key} style={{margin:"22px 0",padding:"16px 18px",borderLeft:"4px solid var(--accent)",borderRadius:"0 14px 14px 0",background:"var(--soft)",fontWeight:650,lineHeight:1.75}}>{renderRichText(b.text,keywords)}</aside>;
+  if(b.type==="table")return <div key={key} style={{overflowX:"auto",margin:"22px 0"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}><thead><tr>{(b.columns||[]).map((x,j)=><th key={j} style={{border:"1px solid var(--line)",padding:"10px",textAlign:"left",fontWeight:800}}>{renderRichText(x,keywords)}</th>)}</tr></thead><tbody>{(b.rows||[]).map((row,j)=><tr key={j}>{row.map((x,k)=><td key={k} style={{border:"1px solid var(--line)",padding:"10px",verticalAlign:"top",lineHeight:1.55}}>{renderRichText(x,keywords)}</td>)}</tr>)}</tbody></table></div>;
   return null;
  });
 }
@@ -47,10 +56,10 @@ export default function ReaderControls({title,notes,contentBlocks,topicId,initia
    <div style={{maxWidth:720,margin:"0 auto"}}>
     <div style={{fontSize:11,fontWeight:850,letterSpacing:".12em",textTransform:"uppercase",opacity:.58,marginBottom:10}}>MPSC STUDY READER</div>
     <h1 style={{fontSize:"clamp(30px,6vw,46px)",lineHeight:1.13,margin:"0 0 30px",letterSpacing:"-.025em"}}>{data.title}</h1>
-    <div style={bodyStyle}>{renderBlocks((data as any).content_blocks?.length?(data as any).content_blocks:contentBlocks, data.notes)}</div>
+    <div style={bodyStyle}>{renderBlocks((data as any).content_blocks?.length?(data as any).content_blocks:contentBlocks, data.notes, [])}</div>
     {data.subtopics?.map((s:Sub,i:number)=><section id={"sub-"+i} key={s.id||i} style={{marginTop:48,paddingTop:34,borderTop:"1px solid var(--line)"}}>
       <h2 style={{fontSize:"clamp(24px,5vw,32px)",lineHeight:1.25,margin:"0 0 20px",fontWeight:850}}>{i+1}. {s.title}</h2>
-      <div style={bodyStyle}>{renderBlocks(marathi?((s as any).content_blocks):s.content_blocks,s.content)}</div>
+      <div style={bodyStyle}>{renderBlocks(marathi?((s as any).content_blocks):s.content_blocks,s.content,s.important_keywords||[])}</div>
       <div style={{marginTop:24,padding:"15px 16px",borderRadius:15,background:theme==="dark"?"#242424":theme==="paper"?"#efe5d2":"rgba(20,70,120,.045)",border:"1px solid var(--line)"}}>
        <div style={{fontSize:12,fontWeight:900,letterSpacing:".04em",marginBottom:10}}>🔑 IMPORTANT MPSC KEYWORDS</div>
        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{Array.isArray(s.important_keywords)&&s.important_keywords.length?s.important_keywords.map((k:Keyword,j:number)=><button key={k.term+j} className="btn secondary" style={{fontSize:12,fontWeight:700}} onClick={()=>explainKeyword(k)}>✨ {k.term}</button>):<span className="muted" style={{fontSize:13}}>{keywordLoading?"Preparing…":"No keywords available."}</span>}</div>
