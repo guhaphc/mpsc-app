@@ -65,18 +65,18 @@ export async function POST(request:Request){
   const topicId=String(body.topicId||"");
   if(!topicId)return NextResponse.json({error:"Topic is required."},{status:400});
 
-  const {data:topic,error:te}=await userClient.from("study_topics").select("id,title,notes,content_blocks,translation_status,original_language").eq("id",topicId).eq("status","published").single();
+  const {data:topic,error:te}=await userClient.from("study_topics").select("id,title,notes,content_blocks,translation_status,original_language,marathi_title,marathi_notes,marathi_content_blocks").eq("id",topicId).eq("status","published").single();
   if(te||!topic)return NextResponse.json({error:"Study topic not found."},{status:404});
-  const {data:subs,error:se}=await userClient.from("study_subtopics").select("id,title,content,content_blocks,marathi_content,marathi_content_blocks,translation_status,sort_order").eq("topic_id",topicId).order("sort_order");
+  const {data:subs,error:se}=await userClient.from("study_subtopics").select("id,title,content,content_blocks,marathi_title,marathi_content,marathi_content_blocks,translation_status,sort_order").eq("topic_id",topicId).order("sort_order");
   if(se)throw se;
 
   const cached=!!subs?.length && subs.every((s:any)=>["draft","approved"].includes(s.translation_status)&&String(s.marathi_content||"").trim());
   if(cached){
     return NextResponse.json({ok:true,cached:true,result:{
-      title:topic.title,
-      notes:topic.notes||"",
-      content_blocks:Array.isArray(topic.content_blocks)?topic.content_blocks:[],
-      subtopics:(subs||[]).map((s:any)=>({id:s.id,title:s.marathi_content_title||s.title,content:s.marathi_content||"",content_blocks:Array.isArray(s.marathi_content_blocks)?s.marathi_content_blocks:[]})),
+      title:topic.marathi_title||topic.title,
+      notes:topic.marathi_notes||"",
+      content_blocks:Array.isArray(topic.marathi_content_blocks)&&topic.marathi_content_blocks.length?topic.marathi_content_blocks:(Array.isArray(topic.content_blocks)?topic.content_blocks:[]),
+      subtopics:(subs||[]).map((s:any)=>({id:s.id,title:s.marathi_title||s.title,content:s.marathi_content||"",content_blocks:Array.isArray(s.marathi_content_blocks)?s.marathi_content_blocks:[]})),
     }});
   }
 
@@ -101,6 +101,7 @@ export async function POST(request:Request){
    const original=(subs||[]).find((s:any)=>s.id===item.id);
    if(!original)continue;
    await writer.from("study_subtopics").update({
+     marathi_title:String(item.title||original.title||""),
      marathi_content:String(item.content||""),
      marathi_content_blocks:cleanBlocks(item.content_blocks),
      translation_status:"draft",
@@ -108,6 +109,15 @@ export async function POST(request:Request){
      translation_updated_at:now
    }).eq("id",original.id);
   }
+
+  await writer.from("study_topics").update({
+    marathi_title:String(translated.title||topic.title||""),
+    marathi_notes:String(translated.notes||""),
+    marathi_content_blocks:cleanBlocks(translated.content_blocks),
+    translation_status:"draft",
+    translation_model:MODEL,
+    translation_updated_at:now
+  }).eq("id",topicId);
 
   const usage=(response as any).usageMetadata||{};
   await userClient.from("ai_study_generation_logs").insert({
