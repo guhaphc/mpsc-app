@@ -3,7 +3,7 @@ import {useEffect,useState} from "react";
 
 type Keyword={term:string;category:string;importance?:string};
 type Block={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table";text?:string;items?:string[];columns?:string[];rows?:string[][]};
-type Sub={id:string;title:string;content:string;content_blocks?:Block[];important_keywords?:Keyword[]};
+type Sub={id:string;title:string;content:string;content_blocks?:Block[];important_keywords?:Keyword[];marathi_content?:string;marathi_content_blocks?:Block[];translation_status?:string};
 
 function renderBlocks(blocks:Block[]|undefined,fallback:string){
  const list=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
@@ -30,9 +30,9 @@ export default function ReaderControls({title,notes,contentBlocks,topicId,initia
  async function toggleBookmark(){if(bookmarking)return;const next=!bookmarked;setBookmarked(next);setBookmarking(true);try{const x=await fetch("/api/student/bookmark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topicId,bookmarked:next})});const d=await x.json();if(!x.ok)throw new Error(d.error||"Could not update bookmark.");setBookmarked(!!d.bookmarked)}catch(e:any){setBookmarked(!next);setError(e?.message||"Could not update bookmark")}finally{setBookmarking(false)}}
  async function explainKeyword(k:Keyword){setKeyword(k);setExplanation("");setExplaining(true);try{const context=notes+"\n"+readerSubtopics.map(s=>s.title+"\n"+s.content).join("\n");const x=await fetch("/api/student/explain-keyword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({keyword:k.term,context,language:marathi?"Marathi":"English"})});const d=await x.json();if(!x.ok)throw new Error(d.error||"Could not prepare the explanation.");setExplanation(d.explanation||"")}catch(e:any){setExplanation(e?.message||"Could not prepare the explanation")}finally{setExplaining(false)}}
  async function markCompleted(){if(completing)return;setCompleting(true);try{const x=await fetch("/api/student/study-progress",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topicId,completed:!completed})});const d=await x.json();if(!x.ok)throw new Error(d.error||"Could not update completion.");setCompleted(!!d.completed)}catch(e:any){setError(e?.message||"Could not update completion")}finally{setCompleting(false)}}
- async function translate(){if(translated){setMarathi(!marathi);return}setLoading(true);setError("");try{const x=await fetch("/api/student/translate-note",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,notes,subtopics:readerSubtopics})});const d=await x.json();if(!x.ok)throw new Error(d.error||"Translation failed.");setTranslated(d.result);setMarathi(true)}catch(e:any){setError(e?.message||"Translation failed")}finally{setLoading(false)}}
+ async function translate(){if(translated){setMarathi(!marathi);return}setLoading(true);setError("");try{const x=await fetch("/api/student/translate-note",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topicId})});const d=await x.json();if(!x.ok)throw new Error(d.error||"Translation failed.");setTranslated(d.result);setMarathi(true)}catch(e:any){setError(e?.message||"Translation failed")}finally{setLoading(false)}}
 
- const data=marathi&&translated?translated:{title,notes,subtopics:readerSubtopics},bg=theme==="paper"?"#f7f0df":theme==="dark"?"#171717":"var(--card)",fg=theme==="dark"?"#eeeeee":"inherit";
+ const data=marathi&&translated?translated:{title,notes,content_blocks:contentBlocks,subtopics:readerSubtopics};bg=theme==="paper"?"#f7f0df":theme==="dark"?"#171717":"var(--card)",fg=theme==="dark"?"#eeeeee":"inherit";
  const bodyStyle={fontSize:`calc(clamp(17px,2vw,19px) * ${fontScale})`,color:fg};
  return <div style={{color:fg}}>
   <div style={{position:"sticky",top:0,zIndex:5,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 0",background:theme==="paper"?"rgba(247,240,223,.96)":theme==="dark"?"rgba(23,23,23,.96)":"var(--bg)",backdropFilter:"blur(10px)",borderBottom:"1px solid var(--line)"}}>
@@ -50,7 +50,7 @@ export default function ReaderControls({title,notes,contentBlocks,topicId,initia
     <div style={bodyStyle}>{renderBlocks((data as any).content_blocks?.length?(data as any).content_blocks:contentBlocks, data.notes)}</div>
     {data.subtopics?.map((s:Sub,i:number)=><section id={"sub-"+i} key={s.id||i} style={{marginTop:48,paddingTop:34,borderTop:"1px solid var(--line)"}}>
       <h2 style={{fontSize:"clamp(24px,5vw,32px)",lineHeight:1.25,margin:"0 0 20px",fontWeight:850}}>{i+1}. {s.title}</h2>
-      <div style={bodyStyle}>{renderBlocks(s.content_blocks,s.content)}</div>
+      <div style={bodyStyle}>{renderBlocks(marathi?((s as any).content_blocks):s.content_blocks,s.content)}</div>
       <div style={{marginTop:24,padding:"15px 16px",borderRadius:15,background:theme==="dark"?"#242424":theme==="paper"?"#efe5d2":"rgba(20,70,120,.045)",border:"1px solid var(--line)"}}>
        <div style={{fontSize:12,fontWeight:900,letterSpacing:".04em",marginBottom:10}}>🔑 IMPORTANT MPSC KEYWORDS</div>
        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{Array.isArray(s.important_keywords)&&s.important_keywords.length?s.important_keywords.map((k:Keyword,j:number)=><button key={k.term+j} className="btn secondary" style={{fontSize:12,fontWeight:700}} onClick={()=>explainKeyword(k)}>✨ {k.term}</button>):<span className="muted" style={{fontSize:13}}>{keywordLoading?"Preparing…":"No keywords available."}</span>}</div>
