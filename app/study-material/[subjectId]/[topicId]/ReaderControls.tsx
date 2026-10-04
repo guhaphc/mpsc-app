@@ -33,15 +33,113 @@ function renderExplanation(text:string){
  </div>;
 }
 
+function expandParagraphBlock(text:string):Block[]{
+ const raw=String(text||"").replace(/\r/g,"").trim();
+ if(!raw)return [];
+ const knownHeadings=[
+  "INTRODUCTION","BACKGROUND","DEFINITION","MEANING","KEY CONCEPT","KEY CONCEPTS",
+  "ETHICAL INQUIRY","MPSC RELEVANCE","QUICK REVISION","EXAMPLE","EXAMPLES",
+  "CASE STUDY","CONCLUSION","SUMMARY","IMPORTANT POINTS","KEY POINTS",
+  "MPSC RELEVANCE","QUICK REVISION","महत्त्व","मुख्य मुद्दे","मुख्य मुद्दा","जलद उजळणी"
+ ];
+ const blocks:Block[]=[];
+ const pushParagraph=(value:string)=>{const v=value.trim();if(v)blocks.push({type:"paragraph",text:v});};
+ const pushBullets=(value:string)=>{
+  const items=value.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean);
+  if(items.length)blocks.push({type:"bullet",items});
+ };
+ const lines=raw.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+ let bulletBuffer:string[]=[];
+ const flushBullets=()=>{if(bulletBuffer.length){blocks.push({type:"bullet",items:[...bulletBuffer]});bulletBuffer=[];}};
+ for(const line of lines){
+  if(/^[-•▪◦]\s*/.test(line)){
+   bulletBuffer.push(line.replace(/^[-•▪◦]\s*/,"").trim());
+   continue;
+  }
+  flushBullets();
+
+  const exact=line.replace(/[:：]\s*$/,"").trim();
+  if(knownHeadings.some(h=>h.toLowerCase()===exact.toLowerCase())){
+   blocks.push({type:"heading",text:exact});
+   continue;
+  }
+
+  const headingMatch=line.match(/^([A-Z][A-Z0-9 &'’\-]{2,40}|[A-Za-z][A-Za-z0-9 &'’\-]{2,40})\s*[:：]\s*(.+)$/);
+  if(headingMatch && knownHeadings.some(h=>h.toLowerCase()===headingMatch[1].trim().toLowerCase())){
+   blocks.push({type:"heading",text:headingMatch[1].trim()});
+   const rest=headingMatch[2].trim();
+   if(/(?:^|\s)•\s*/.test(rest))pushBullets(rest); else pushParagraph(rest);
+   continue;
+  }
+
+  // Handle source text such as "INTRODUCTION Ethics, often..." where the heading
+  // was accidentally merged into the first paragraph.
+  const mergedHeading=knownHeadings.find(h=>new RegExp("^"+escapeRegExp(h)+"(?:\\s+|[:：])","i").test(line));
+  if(mergedHeading){
+   const rest=line.replace(new RegExp("^"+escapeRegExp(mergedHeading)+"(?:\\s+|[:：]\\s*)","i"),"").trim();
+   blocks.push({type:"heading",text:mergedHeading});
+   if(rest) {
+    if(/(?:^|\s)•\s*/.test(rest))pushBullets(rest); else pushParagraph(rest);
+   }
+   continue;
+  }
+
+  // Convert inline bullet runs into a real list so bullets never sit inside a paragraph.
+  if(/(?:^|\s)•\s*/.test(line)){
+   const parts=line.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean);
+   if(parts.length>1){
+    const lead=parts.shift()||"";
+    const colonLead=lead.match(/^(.{2,80})[:：]\s*$/);
+    if(colonLead)blocks.push({type:"subheading",text:colonLead[1].trim()});
+    else pushParagraph(lead);
+    if(parts.length)blocks.push({type:"bullet",items:parts});
+    continue;
+   }
+  }
+
+  // A short label followed by a colon is treated as a subheading when it is
+  // clearly a section label, rather than ordinary prose.
+  const label=line.match(/^([^:：]{2,42})[:：]\s*(.+)$/);
+  if(label && (knownHeadings.some(h=>h.toLowerCase()===label[1].trim().toLowerCase()) || label[1].trim().length<=28 && !/[.!?]$/.test(label[1].trim()))){
+   blocks.push({type:"subheading",text:label[1].trim()});
+   if(/(?:^|\s)•\s*/.test(label[2]))pushBullets(label[2]); else pushParagraph(label[2]);
+   continue;
+  }
+
+  pushParagraph(line);
+ }
+ flushBullets();
+ return blocks;
+}
+
+function normalizeBlocks(blocks:Block[]|undefined,fallback:string):Block[]{
+ const source=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
+ const out:Block[]=[];
+ for(const block of source){
+  if(block.type==="paragraph"){
+   out.push(...expandParagraphBlock(block.text||""));
+  }else if(block.type==="bullet"||block.type==="numbered"){
+   const items=(block.items||[]).flatMap(item=>{
+    const clean=String(item||"").trim();
+    return clean.includes("•")?clean.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean):[clean];
+   }).filter(Boolean);
+   out.push({...block,items});
+  }else{
+   out.push(block);
+  }
+ }
+ return out;
+}
+
 function renderBlocks(blocks:Block[]|undefined,fallback:string,keywords:Keyword[]=[]){
- const list=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
+ const list=normalizeBlocks(blocks,fallback);
  return list.map((b,i)=>{
   const key="b-"+i;
   if(b.type==="heading")return <h2 key={key} style={{margin:"34px 0 12px",fontSize:"clamp(24px,5vw,31px)",lineHeight:1.25,fontWeight:850,letterSpacing:"-.02em"}}>{renderRichText(b.text,keywords)}</h2>;
   if(b.type==="subheading")return <h3 key={key} style={{margin:"27px 0 9px",fontSize:"clamp(19px,4vw,23px)",lineHeight:1.35,fontWeight:800}}>{renderRichText(b.text,keywords)}</h3>;
   if(b.type==="paragraph")return <p key={key} style={{margin:"0 0 17px",lineHeight:1.9,letterSpacing:".005em"}}>{renderRichText(b.text,keywords)}</p>;
-  if(b.type==="bullet")return <ul key={key} style={{margin:"4px 0 18px",paddingLeft:24}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{renderRichText(x,keywords)}</li>)}</ul>;
-  if(b.type==="numbered")return <ol key={key} style={{margin:"4px 0 18px",paddingLeft:27}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:9,lineHeight:1.75}}>{renderRichText(x,keywords)}</li>)}</ol>;
+  if(b.type==="bullet")return <ul key={key} style={{margin:"8px 0 22px",paddingLeft:25,listStylePosition:"outside"}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:12,lineHeight:1.78,paddingLeft:5}}>{renderRichText(x,keywords)}</li>)}</ul>;
+  if(b.type==="numbered")return <ol key={key} style={{margin:"8px 0 22px",paddingLeft:28}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:12,lineHeight:1.78,paddingLeft:5}}>{renderRichText(x,keywords)}</li>)}</ol>;
   if(b.type==="callout")return <aside key={key} style={{margin:"22px 0",padding:"16px 18px",borderLeft:"4px solid var(--accent)",borderRadius:"0 14px 14px 0",background:"var(--soft)",fontWeight:650,lineHeight:1.75}}>{renderRichText(b.text,keywords)}</aside>;
   if(b.type==="table")return <div key={key} style={{overflowX:"auto",margin:"22px 0"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}><thead><tr>{(b.columns||[]).map((x,j)=><th key={j} style={{border:"1px solid var(--line)",padding:"10px",textAlign:"left",fontWeight:800}}>{renderRichText(x,keywords)}</th>)}</tr></thead><tbody>{(b.rows||[]).map((row,j)=><tr key={j}>{row.map((x,k)=><td key={k} style={{border:"1px solid var(--line)",padding:"10px",verticalAlign:"top",lineHeight:1.55}}>{renderRichText(x,keywords)}</td>)}</tr>)}</tbody></table></div>;
   return null;
