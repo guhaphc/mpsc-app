@@ -10,21 +10,24 @@ const allowedStyles=new Set(["color","background-color","font-family","font-size
 
 function sanitize(html:string){
  let x=String(html||"");
- x=x.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi,"");
- x=x.replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi,"");
- x=x.replace(/javascript:/gi,"");
- x=x.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
+ const scriptRe=new RegExp("<script[^>]*>[\\\\s\\\\S]*?<\\\\/script>","gi");
+ const styleRe=new RegExp("<style[^>]*>[\\\\s\\\\S]*?<\\\\/style>","gi");
+ const tagRe=new RegExp("<\\\\/?([a-z0-9]+)([^>]*)>","gi");
+ x=x.replace(scriptRe,"").replace(styleRe,"").replace(/javascript:/gi,"");
+ x=x.replace(tagRe,(m,tag,attrs)=>{
   const t=String(tag).toLowerCase();
   if(!allowedTags.has(t))return "";
   if(m.startsWith("</"))return "</"+t+">";
   if(t==="br")return "<br>";
   if(t==="a"){
-   const href=(String(attrs).match(/href\\s*=\\s*["']([^"']+)["']/i)?.[1]||"");
+   const hrefRe=new RegExp("href\\\\s*=\\\\s*[\\\"']([^\\\"']+)[\\\"']","i");
+   const href=(String(attrs).match(hrefRe)?.[1]||"");
    return /^(https?:|mailto:)/i.test(href)
     ? '<a href="'+href.replace(/"/g,"&quot;")+'" target="_blank" rel="noopener noreferrer">'
     : "<a>";
   }
-  const styleMatch=String(attrs).match(/style\\s*=\\s*["']([^"']*)["']/i);
+  const styleRe2=new RegExp("style\\\\s*=\\\\s*[\\\"']([^\\\"']*)[\\\"']","i");
+  const styleMatch=String(attrs).match(styleRe2);
   if(styleMatch){
    const safe=styleMatch[1].split(";").map((v:string)=>v.trim()).filter(Boolean)
     .filter((v:string)=>allowedStyles.has(v.split(":")[0].trim().toLowerCase()))
