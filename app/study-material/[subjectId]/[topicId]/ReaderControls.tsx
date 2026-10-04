@@ -33,7 +33,7 @@ function renderExplanation(text:string){
  </div>;
 }
 
-function escapeRegExp(s:string){return s.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\function expandParagraphBlock(text:string):Block[]{");}\n\nfunction expandParagraphBlock(text:string):Block[]{
+function expandParagraphBlock(text:string):Block[]{
  const raw=String(text||"").replace(/\r/g,"").trim();
  if(!raw)return [];
  const knownHeadings=[
