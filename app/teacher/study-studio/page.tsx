@@ -18,10 +18,55 @@ export default function StudyStudio(){
  useEffect(()=>{load()},[]);
  function openTopic(t:Topic){setTopic(t);setTopicTitle(t.title);setSubject(subjects.find(s=>s.id===t.subject_id)?.subject_name||"");setEditing(false);setTimeout(()=>{if(editor.current)editor.current.innerHTML=blocksToHtml(t.content_blocks||[])},0);setError("");setMessage("");window.scrollTo({top:0,behavior:"smooth"})}
  function format(cmd:string,value?:string){editor.current?.focus();document.execCommand(cmd,false,value)}
+ const fontLevels=[12,14,16,18,20,22,24,28];
+ function currentBlockElements(){
+  const root=editor.current;if(!root)return [] as HTMLElement[];
+  const sel=window.getSelection();if(!sel||!sel.rangeCount)return [];
+  const range=sel.getRangeAt(0);const all=Array.from(root.querySelectorAll("p,h1,h2,h3,h4,div,li,blockquote")) as HTMLElement[];
+  const hit=all.filter(el=>{try{return range.intersectsNode(el)}catch{return false}});
+  if(hit.length)return hit;
+  const node=sel.anchorNode?.nodeType===3?sel.anchorNode.parentElement:sel.anchorNode as HTMLElement|null;
+  const block=node?.closest?.("p,h1,h2,h3,h4,div,li,blockquote") as HTMLElement|null;
+  return block?[block]:[];
+ }
+ function setBlockStyle(name:string,value:string){
+  const blocks=currentBlockElements();if(!blocks.length)return;
+  blocks.forEach(el=>el.style.setProperty(name,value));
+ }
+ function lineSpacing(delta:number){
+  const blocks=currentBlockElements();if(!blocks.length)return;
+  const first=parseFloat(getComputedStyle(blocks[0]).lineHeight)/parseFloat(getComputedStyle(blocks[0]).fontSize);
+  const base=Number.isFinite(first)?first:1.5;
+  const next=Math.min(2.5,Math.max(1,Math.round((base+delta)*100)/100));
+  blocks.forEach(el=>el.style.lineHeight=String(next));
+ }
+ function paragraphSpacing(delta:number){
+  const blocks=currentBlockElements();if(!blocks.length)return;
+  const first=parseFloat(getComputedStyle(blocks[0]).marginBottom);
+  const base=Number.isFinite(first)?first:8;
+  const next=Math.min(40,Math.max(0,Math.round((base+delta)/2)*2));
+  blocks.forEach(el=>el.style.marginBottom=String(next)+"px");
+ }
+ function normalizeFontTags(){
+  const root=editor.current;if(!root)return;
+  const map:Record<string,string>={"1":"12px","2":"14px","3":"16px","4":"18px","5":"20px","6":"24px","7":"28px"};
+  root.querySelectorAll("font[size]").forEach(node=>{
+   const el=node as HTMLElement;const size=el.getAttribute("size")||"3";const span=document.createElement("span");
+   span.innerHTML=el.innerHTML;span.style.fontSize=map[size]||"16px";el.replaceWith(span);
+  });
+ }
+ function changeFontSize(delta:number){
+  const sel=window.getSelection();const node=sel?.anchorNode?.nodeType===3?sel.anchorNode.parentElement:sel?.anchorNode as HTMLElement|null;
+  const current=parseFloat(node?getComputedStyle(node).fontSize:"16")||16;
+  let nearest=fontLevels.reduce((a,b)=>Math.abs(b-current)<Math.abs(a-current)?b:a,16);
+  nearest=fontLevels[Math.min(fontLevels.length-1,Math.max(0,fontLevels.indexOf(nearest)+(delta>0?1:-1)))];
+  editor.current?.focus();document.execCommand("fontSize",false,String(fontLevels.indexOf(nearest)+1));normalizeFontTags();
+ }
+ function setExactFontSize(px:number){editor.current?.focus();document.execCommand("fontSize",false,String(fontLevels.indexOf(px)+1));normalizeFontTags();}
  function sanitizePastedHtml(input:string){
   const doc=new DOMParser().parseFromString(input,"text/html");
   const allowed=new Set(["P","BR","DIV","SPAN","H1","H2","H3","H4","STRONG","B","EM","I","U","UL","OL","LI","BLOCKQUOTE","A","FONT"]);
-  const styles=new Set(["color","background-color","font-family","font-size","font-weight","font-style","text-decoration","text-align"]);
+  const styles=new Set(["color","background-color","font-family","font-size","font-weight","font-style","text-decoration","text-align","line-height","margin-top","margin-bottom"]);
   const walk=(el:Element)=>{
    Array.from(el.children).forEach(walk);
    if(!allowed.has(el.tagName)){el.replaceWith(...Array.from(el.childNodes));return;}
@@ -51,7 +96,7 @@ export default function StudyStudio(){
  {error&&<div className="error" style={{marginBottom:14}}>{error}</div>}{message&&<div className="success" style={{marginBottom:14}}>{message}</div>}
  <section className="card"><h2>1. Upload Original PDF</h2><div className="formGrid"><label>Subject<input className="input" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Ethics"/></label><label>Stage<select className="select" value={stage} onChange={e=>setStage(e.target.value)}><option>Prelims</option><option>Mains</option></select></label><label>Paper<select className="select" value={paper} onChange={e=>setPaper(e.target.value)}><option>GS Paper I</option><option>GS Paper II</option><option>GS Paper III</option><option>GS Paper IV</option></select></label><label>Chapter / Topic<input className="input" value={topicTitle} onChange={e=>setTopicTitle(e.target.value)} placeholder="e.g. Introduction to Ethics"/></label></div><input type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)} style={{marginTop:14}}/>{file&&<div className="success" style={{marginTop:10}}>✓ {file.name}</div>}<button className="btn primary" style={{marginTop:12}} onClick={importPdf} disabled={busy||!file}>{busy?"IMPORTING…":"UPLOAD & OPEN EDITOR"}</button></section>
  {topic&&<section className="card"><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",flexWrap:"wrap"}}><div><h2 style={{marginBottom:4}}>{topicTitle}</h2><span className="badge">{topic.status==="published"?"PUBLISHED":"DRAFT"}</span></div><div style={{display:"flex",gap:7,flexWrap:"wrap"}}><button className="btn secondary small" onClick={()=>setEditing(false)}>View</button><button className="btn secondary small" onClick={()=>setEditing(true)}>Edit</button><button className="btn secondary small" onClick={()=>setPreview(true)}>Preview</button></div></div><input className="input" value={topicTitle} onChange={e=>setTopicTitle(e.target.value)} style={{margin:"14px 0"}}/>
- {editing&&<div style={{display:"flex",gap:6,flexWrap:"wrap",padding:10,border:"1px solid var(--line)",borderBottom:0,borderRadius:"16px 16px 0 0",background:"var(--soft)"}}><select className="select" style={{width:120}} onChange={e=>format("formatBlock",e.target.value)} defaultValue="p"><option value="p">Paragraph</option><option value="h1">Title</option><option value="h2">Heading</option><option value="h3">Subheading</option></select><select className="select" style={{width:110}} onChange={e=>format("fontName",e.target.value)} defaultValue="Arial"><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Noto Sans</option><option>Noto Sans Devanagari</option></select><select className="select" style={{width:90}} onChange={e=>format("fontSize",e.target.value)} defaultValue="3"><option value="2">Small</option><option value="3">Normal</option><option value="4">Large</option><option value="5">XL</option><option value="6">XXL</option></select><Tool label="B" cmd="bold"/><Tool label="I" cmd="italic"/><Tool label="U" cmd="underline"/><Tool label="Text color" cmd="foreColor" value="#b91c1c"/><Tool label="Highlight" cmd="hiliteColor" value="#fff2a8"/><Tool label="• Bullets" cmd="insertUnorderedList"/><Tool label="1. Numbering" cmd="insertOrderedList"/><Tool label="↶" cmd="undo"/><Tool label="↷" cmd="redo"/><Tool label="←" cmd="justifyLeft"/><Tool label="↔" cmd="justifyCenter"/><Tool label="→" cmd="justifyRight"/></div>}
+ {editing&&<div style={{display:"flex",gap:6,flexWrap:"wrap",padding:10,border:"1px solid var(--line)",borderBottom:0,borderRadius:"16px 16px 0 0",background:"var(--soft)"}}><select className="select" style={{width:120}} onChange={e=>format("formatBlock",e.target.value)} defaultValue="p"><option value="p">Paragraph</option><option value="h1">Title</option><option value="h2">Heading</option><option value="h3">Subheading</option></select><select className="select" style={{width:110}} onChange={e=>format("fontName",e.target.value)} defaultValue="Arial"><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Noto Sans</option><option>Noto Sans Devanagari</option></select><button type="button" className="btn secondary small" title="Decrease font size" onMouseDown={e=>e.preventDefault()} onClick={()=>changeFontSize(-1)}>A−</button><select className="select" style={{width:105}} onChange={e=>setExactFontSize(Number(e.target.value))} defaultValue="16"><option value="12">12 px</option><option value="14">14 px</option><option value="16">16 px</option><option value="18">18 px</option><option value="20">20 px</option><option value="22">22 px</option><option value="24">24 px</option><option value="28">28 px</option></select><button type="button" className="btn secondary small" title="Increase font size" onMouseDown={e=>e.preventDefault()} onClick={()=>changeFontSize(1)}>A+</button><Tool label="B" cmd="bold"/><Tool label="I" cmd="italic"/><Tool label="U" cmd="underline"/><Tool label="Text color" cmd="foreColor" value="#b91c1c"/><Tool label="Highlight" cmd="hiliteColor" value="#fff2a8"/><Tool label="• Bullets" cmd="insertUnorderedList"/><Tool label="1. Numbering" cmd="insertOrderedList"/><Tool label="↶" cmd="undo"/><Tool label="↷" cmd="redo"/><Tool label="←" cmd="justifyLeft"/><Tool label="↔" cmd="justifyCenter"/><Tool label="→" cmd="justifyRight"/><button type="button" className="btn secondary small" title="Decrease line spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>lineSpacing(-0.15)}>Line −</button><select className="select" style={{width:105}} onChange={e=>setBlockStyle("line-height",e.target.value)} defaultValue=""><option value="" disabled>Line spacing</option><option value="1">1.0</option><option value="1.15">1.15</option><option value="1.3">1.3</option><option value="1.5">1.5</option><option value="1.75">1.75</option><option value="2">2.0</option></select><button type="button" className="btn secondary small" title="Increase line spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>lineSpacing(0.15)}>Line +</button><button type="button" className="btn secondary small" title="Decrease paragraph spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>paragraphSpacing(-4)}>Para −</button><button type="button" className="btn secondary small" title="Increase paragraph spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>paragraphSpacing(4)}>Para +</button></div>}
  <div ref={editor} contentEditable={editing} suppressContentEditableWarning onPaste={handlePaste} style={{minHeight:"62vh",padding:"30px clamp(18px,4vw,42px)",border:"1px solid var(--line)",borderRadius:editing?"0 0 18px 18px":"18px",background:"var(--card)",fontFamily:"Arial, Noto Sans Devanagari, sans-serif",fontSize:17,lineHeight:1.85,outline:"none",overflowWrap:"anywhere"}}/>
  <div style={{display:"flex",gap:9,flexWrap:"wrap",marginTop:16}}><button className="btn secondary" onClick={saveDraft} disabled={busy||!editing}>{busy?"SAVING…":"💾 SAVE TO DRAFTS"}</button><button className="btn primary" onClick={publish} disabled={busy}>{busy?"PUBLISHING…":"🌐 PUBLISH"}</button></div></section>}
  <section className="card"><h2>Draft & Published Library</h2><p className="muted">Only Published material is visible to students.</p>{subjects.map(s=><div key={s.id} style={{borderTop:"1px solid var(--line)",padding:"12px 0"}}><strong>{s.subject_name}</strong><div className="muted" style={{fontSize:12}}>{s.stage} · {s.paper} · {s.status}</div>{s.topics.map(t=><button key={t.id} className="topicRow" onClick={()=>openTopic(t)} style={{width:"100%",textAlign:"left",marginTop:7}}><strong>{t.title}</strong><span className="muted"> · {t.status}</span></button>)}</div>)}{!subjects.length&&<p className="muted">No study material yet.</p>}</section>
