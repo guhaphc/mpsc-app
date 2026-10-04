@@ -54,81 +54,122 @@ function renderExplanation(text:string){
 }
 
 function expandParagraphBlock(text:string):Block[]{
- const raw=String(text||"").replace(/\r/g,"").trim();
+ const raw=String(text||"").replace(/\\r/g,"").trim();
  if(!raw)return [];
  const knownHeadings=[
   "INTRODUCTION","BACKGROUND","DEFINITION","MEANING","KEY CONCEPT","KEY CONCEPTS",
   "ETHICAL INQUIRY","MPSC RELEVANCE","QUICK REVISION","EXAMPLE","EXAMPLES",
   "CASE STUDY","CONCLUSION","SUMMARY","IMPORTANT POINTS","KEY POINTS",
-  "MPSC RELEVANCE","QUICK REVISION","महत्त्व","मुख्य मुद्दे","मुख्य मुद्दा","जलद उजळणी"
+  "महत्त्व","मुख्य मुद्दे","मुख्य मुद्दा","जलद उजळणी"
  ];
  const blocks:Block[]=[];
- const pushParagraph=(value:string)=>{const v=value.trim();if(v)blocks.push({type:"paragraph",text:v});};
- const pushBullets=(value:string)=>{
-  const items=value.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean);
-  if(items.length)blocks.push({type:"bullet",items});
+ const pushParagraph=(value:string)=>{
+  const v=value.replace(/\\s+/g," ").trim();
+  if(v)blocks.push({type:"paragraph",text:v});
  };
- const lines=raw.split(/\n+/).map(x=>x.trim()).filter(Boolean);
- let bulletBuffer:string[]=[];
- const flushBullets=()=>{if(bulletBuffer.length){blocks.push({type:"bullet",items:[...bulletBuffer]});bulletBuffer=[];}};
+ const pushBullets=(items:string[])=>{
+  const clean=items.map(x=>x.replace(/\\s+/g," ").trim()).filter(Boolean);
+  if(clean.length)blocks.push({type:"bullet",items:clean});
+ };
+ const isHeading=(line:string)=>{
+  const clean=line.replace(/[:：]\\s*$/,"").trim();
+  return knownHeadings.find(h=>h.toLowerCase()===clean.toLowerCase());
+ };
+ const isHeadingWithRest=(line:string)=>{
+  const m=line.match(/^([^:：]{2,42})[:：]\\s*(.*)$/);
+  if(!m)return null;
+  const heading=knownHeadings.find(h=>h.toLowerCase()===m[1].trim().toLowerCase());
+  return heading?{heading,rest:m[2].trim()}:null;
+ };
+
+ // A single newline is usually a visual wrap from AI/PDF extraction, not a
+ // paragraph boundary. Only blank lines create paragraph boundaries. Headings
+ // and bullets are still detected line-by-line.
+ const lines=raw.split(/\\n/).map(x=>x.trim());
+ let paragraphParts:string[]=[];
+ let bulletParts:string[]=[];
+ let inBullet=false;
+
+ const flushBullet=()=>{
+  if(bulletParts.length){
+   pushBullets([bulletParts.join(" ")]);
+   bulletParts=[];
+  }
+  inBullet=false;
+ };
+ const flushParagraph=()=>{
+  if(paragraphParts.length){
+   pushParagraph(paragraphParts.join(" "));
+   paragraphParts=[];
+  }
+ };
+
  for(const line of lines){
-  if(/^[-•▪◦]\s*/.test(line)){
-   bulletBuffer.push(line.replace(/^[-•▪◦]\s*/,"").trim());
-   continue;
-  }
-  flushBullets();
-
-  const exact=line.replace(/[:：]\s*$/,"").trim();
-  if(knownHeadings.some(h=>h.toLowerCase()===exact.toLowerCase())){
-   blocks.push({type:"heading",text:exact});
+  if(!line){
+   flushBullet();
+   flushParagraph();
    continue;
   }
 
-  const headingMatch=line.match(/^([A-Z][A-Z0-9 &'’\-]{2,40}|[A-Za-z][A-Za-z0-9 &'’\-]{2,40})\s*[:：]\s*(.+)$/);
-  if(headingMatch && knownHeadings.some(h=>h.toLowerCase()===headingMatch[1].trim().toLowerCase())){
-   blocks.push({type:"heading",text:headingMatch[1].trim()});
-   const rest=headingMatch[2].trim();
-   if(/(?:^|\s)•\s*/.test(rest))pushBullets(rest); else pushParagraph(rest);
+  const heading=isHeading(line);
+  if(heading){
+   flushBullet();
+   flushParagraph();
+   blocks.push({type:"heading",text:heading});
    continue;
   }
 
-  // Handle source text such as "INTRODUCTION Ethics, often..." where the heading
-  // was accidentally merged into the first paragraph.
-  const mergedHeading=knownHeadings.find(h=>line.toLowerCase().startsWith(h.toLowerCase()) && line.length>h.length && /^(?:\\s+|[:：])/.test(line.slice(h.length)));
-  if(mergedHeading){
-   const rest=line.slice(mergedHeading.length).replace(/^\\s+|^[:：]\\s*/,"").trim();
-   blocks.push({type:"heading",text:mergedHeading});
-   if(rest) {
-    if(/(?:^|\s)•\s*/.test(rest))pushBullets(rest); else pushParagraph(rest);
-   }
+  const headingWithRest=isHeadingWithRest(line);
+  if(headingWithRest){
+   flushBullet();
+   flushParagraph();
+   blocks.push({type:"heading",text:headingWithRest.heading});
+   if(headingWithRest.rest)paragraphParts.push(headingWithRest.rest);
    continue;
   }
 
-  // Convert inline bullet runs into a real list so bullets never sit inside a paragraph.
-  if(/(?:^|\s)•\s*/.test(line)){
-   const parts=line.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean);
+  const bulletMatch=line.match(/^[-•▪◦]\\s*(.*)$/);
+  if(bulletMatch){
+   flushParagraph();
+   flushBullet();
+   bulletParts=[bulletMatch[1].trim()];
+   inBullet=true;
+   continue;
+  }
+
+  // If a wrapped line continues an existing bullet, keep it inside that
+  // bullet instead of creating a distorted standalone paragraph.
+  if(inBullet){
+   bulletParts.push(line);
+   continue;
+  }
+
+  // Inline bullet runs are converted to a real list while preserving all
+  // wrapped prose before/after them.
+  if(/(?:^|\\s)•\\s*/.test(line)){
+   const parts=line.split(/\\s*•\\s*/).map(x=>x.trim()).filter(Boolean);
    if(parts.length>1){
-    const lead=parts.shift()||"";
-    const colonLead=lead.match(/^(.{2,80})[:：]\s*$/);
-    if(colonLead)blocks.push({type:"subheading",text:colonLead[1].trim()});
-    else pushParagraph(lead);
-    if(parts.length)blocks.push({type:"bullet",items:parts});
+    flushParagraph();
+    pushBullets(parts);
     continue;
    }
   }
 
-  // A short label followed by a colon is treated as a subheading when it is
-  // clearly a section label, rather than ordinary prose.
-  const label=line.match(/^([^:：]{2,42})[:：]\s*(.+)$/);
-  if(label && (knownHeadings.some(h=>h.toLowerCase()===label[1].trim().toLowerCase()) || label[1].trim().length<=28 && !/[.!?]$/.test(label[1].trim()))){
+  // Short labels followed by a colon can be section subheadings.
+  const label=line.match(/^([^:：]{2,42})[:：]\\s*(.+)$/);
+  if(label && (knownHeadings.some(h=>h.toLowerCase()===label[1].trim().toLowerCase()) ||
+      (label[1].trim().length<=28 && !/[.!?]$/.test(label[1].trim())))){
+   flushBullet();
+   flushParagraph();
    blocks.push({type:"subheading",text:label[1].trim()});
-   if(/(?:^|\s)•\s*/.test(label[2]))pushBullets(label[2]); else pushParagraph(label[2]);
+   paragraphParts.push(label[2].trim());
    continue;
   }
 
-  pushParagraph(line);
+  paragraphParts.push(line);
  }
- flushBullets();
+ flushBullet();
+ flushParagraph();
  return blocks;
 }
 
