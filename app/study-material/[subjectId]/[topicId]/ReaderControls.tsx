@@ -15,20 +15,39 @@ function renderRichText(text:string|undefined, keywords:Keyword[]=[]){
  return parts.map((part,i)=>terms.some(t=>t.toLowerCase()===part.toLowerCase())?<strong key={i}>{part}</strong>:<span key={i}>{part}</span>);
 }
 function renderExplanation(text:string){
- const lines=String(text||"").split(/\\n+/).map(x=>x.trim()).filter(Boolean);
- const labels=["Meaning","Key point","MPSC relevance","Quick revision","महत्त्व","मुख्य मुद्दा","MPSC महत्त्व","जलद उजळणी"];
- return <div style={{display:"grid",gap:18}}>
-  {lines.map((line,i)=>{
-   const m=line.match(/^([^:]{2,32}):\\s*(.*)$/);
-   const exact=labels.find(x=>x.toLowerCase()===line.toLowerCase());
-   const label=exact||((m&&labels.some(x=>x.toLowerCase()===m[1].trim().toLowerCase()))?m![1].trim():"");
-   const body=exact?"":label?m![2]:line;
-   return label
-    ? <section key={i} style={{padding:"14px 16px",border:"1px solid var(--line)",borderRadius:16,background:"rgba(20,70,120,.045)"}}>
-        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:950,lineHeight:1.3}}>{label}</h3>
-        {body&&<div style={{lineHeight:1.78,fontSize:16}}>{body}</div>}
-      </section>
-    : <p key={i} style={{margin:0,lineHeight:1.78,fontSize:16}}>{body}</p>;
+ const raw=String(text||"").replace(/\\r/g,"").trim();
+ const lines=raw.split(/\\n+/).map(x=>x.trim()).filter(Boolean);
+ const labels=["Meaning","Key point","MPSC relevance","Quick revision","Important point","Key points","महत्त्व","मुख्य मुद्दा","MPSC महत्त्व","जलद उजळणी","महत्त्वाचे मुद्दे"];
+ const blocks:Array<{type:"heading"|"paragraph"|"bullet";text?:string;items?:string[]}>=[];
+ let bullets:string[]=[];
+ const flush=()=>{if(bullets.length){blocks.push({type:"bullet",items:[...bullets]});bullets=[];}};
+ for(const line of lines){
+  if(/^[-•▪◦]\\s*/.test(line)){bullets.push(line.replace(/^[-•▪◦]\\s*/,"").trim());continue;}
+  flush();
+  const exact=labels.find(x=>x.toLowerCase()===line.replace(/[:：]$/,"").toLowerCase());
+  if(exact){blocks.push({type:"heading",text:exact});continue;}
+  const labelMatch=line.match(/^([^:：]{2,32})[:：]\\s*(.*)$/);
+  if(labelMatch && labels.some(x=>x.toLowerCase()===labelMatch[1].trim().toLowerCase())){
+   blocks.push({type:"heading",text:labelMatch[1].trim()});
+   if(labelMatch[2].trim())blocks.push({type:"paragraph",text:labelMatch[2].trim()});
+   continue;
+  }
+  if(/(?:^|\\s)•\\s*/.test(line)){
+   const parts=line.split(/\\s*•\\s*/).map(x=>x.trim()).filter(Boolean);
+   if(parts.length>1){
+    if(parts[0])blocks.push({type:"paragraph",text:parts[0]});
+    bullets.push(...parts.slice(1));
+    continue;
+   }
+  }
+  blocks.push({type:"paragraph",text:line});
+ }
+ flush();
+ return <div style={{display:"grid",gap:8}}>
+  {blocks.map((b,i)=>{
+   if(b.type==="heading")return <h3 key={i} style={{margin:"18px 0 2px",fontSize:18,fontWeight:900,lineHeight:1.35,letterSpacing:"-.01em"}}>{b.text}</h3>;
+   if(b.type==="bullet")return <ul key={i} style={{margin:"4px 0 10px",paddingLeft:24}}>{(b.items||[]).map((item,j)=><li key={j} style={{marginBottom:10,lineHeight:1.72,paddingLeft:4}}>{item}</li>)}</ul>;
+   return <p key={i} style={{margin:"0 0 7px",lineHeight:1.82,fontSize:16}}>{b.text}</p>;
   })}
  </div>;
 }
