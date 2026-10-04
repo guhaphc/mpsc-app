@@ -65,13 +65,38 @@ export async function POST(req:Request){
   if(bytes.length>50*1024*1024)throw new Error("PDF must be 50 MB or smaller.");
   const blocks=await extractPdf(bytes);
 
-  const {data:sub,error:subError}=await s.from("study_subjects").insert({
-   exam:"MPSC State Services",stage,paper,subject_name:subject,status:"draft",created_by:p.id,content_area:"teacher"
-  }).select("id").single();
-  if(subError||!sub)throw new Error(subError?.message||"Could not create study subject.");
+  // Reuse an existing teacher subject with the same exam, stage, paper and subject name.
+  // This keeps multiple chapters/topics grouped under one subject.
+  let {data:sub,error:subError}=await s.from("study_subjects")
+   .select("id")
+   .eq("exam","MPSC State Services")
+   .eq("stage",stage)
+   .eq("paper",paper)
+   .eq("subject_name",subject)
+   .eq("created_by",p.id)
+   .eq("content_area","teacher")
+   .maybeSingle();
+  if(subError)throw new Error(subError.message);
+
+  if(!sub){
+   const created=await s.from("study_subjects").insert({
+    exam:"MPSC State Services",stage,paper,subject_name:subject,status:"draft",created_by:p.id,content_area:"teacher"
+   }).select("id").single();
+   if(created.error||!created.data)throw new Error(created.error?.message||"Could not create study subject.");
+   sub=created.data;
+  }
+
+  // Put the new chapter after the existing chapters in this subject.
+  const {data:lastTopic}=await s.from("study_topics")
+   .select("sort_order")
+   .eq("subject_id",sub.id)
+   .order("sort_order",{ascending:false})
+   .limit(1)
+   .maybeSingle();
+  const nextOrder=Number(lastTopic?.sort_order||0)+1;
 
   const {data:topic,error:topicError}=await s.from("study_topics").insert({
-   subject_id:sub.id,title:topicTitle,notes:"",content_blocks:blocks,status:"draft",original_language:"English",translation_status:"not_translated",sort_order:1
+   subject_id:sub.id,title:topicTitle,notes:"",content_blocks:blocks,status:"draft",original_language:"English",translation_status:"not_translated",sort_order:nextOrder
   }).select("id").single();
   if(topicError||!topic)throw new Error(topicError?.message||"Could not create study topic.");
 
