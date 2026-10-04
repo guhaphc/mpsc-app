@@ -19,7 +19,14 @@ function renderExplanation(text:string){
 }
 
 function expandParagraphBlock(text:string):Block[]{
- const raw=String(text||"").replace(/\r/g,"").trim();
+ const raw=String(text||"")
+  .replace(/\r/g,"")
+  // Some translated rows contain a legacy encoded bullet (U+0089).
+  // Convert it to a real bullet before parsing so it never reaches the UI
+  // as a broken vertical/control glyph.
+  .replace(/\u0089/g,"•")
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0088\u008A-\u009F]/g,"")
+  .trim();
  if(!raw)return [];
  const blocks:Block[]=[];
  const lines=raw.split(/\n/);
