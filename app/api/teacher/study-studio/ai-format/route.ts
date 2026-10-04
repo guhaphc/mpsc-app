@@ -10,7 +10,7 @@ const allowedStyles=new Set(["color","background-color","font-family","font-size
 
 function sanitize(html:string){
  let x=String(html||"");
- x=x.replace(/<script[^>]*>[\\w\\W]*?<\\/script>/gi,"").replace(/<style[^>]*>[\\w\\W]*?<\\/style>/gi,"").replace(/javascript:/gi,"");
+ x=x.replace(/<script[^>]*>[\w\W]*?<\/script>/gi,"").replace(/<style[^>]*>[\w\W]*?<\\/style>/gi,"").replace(/javascript:/gi,"");
  x=x.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
   const t=String(tag).toLowerCase();
   if(!allowedTags.has(t))return "";
