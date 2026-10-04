@@ -9,28 +9,30 @@ const allowedTags=new Set(["p","br","div","span","h1","h2","h3","h4","strong","b
 const allowedStyles=new Set(["color","background-color","font-family","font-size","font-weight","font-style","text-decoration","text-align","line-height","margin-top","margin-bottom"]);
 
 function sanitize(html:string){
- const doc=new DOMParser().parseFromString(String(html||""),"text/html");
- const walk=(el:Element)=>{
-  Array.from(el.children).forEach(walk);
-  if(!allowedTags.has(el.tagName)){el.replaceWith(...Array.from(el.childNodes));return;}
-  Array.from(el.attributes).forEach(a=>{
-   const n=a.name.toLowerCase();
-   if(n.startsWith("on")||n==="class"||n==="id"||n==="contenteditable")el.removeAttribute(a.name);
-  });
-  if(el.hasAttribute("style")){
-   const safe=Array.from(el.getAttribute("style")!.split(";")).map(x=>x.trim()).filter(Boolean).filter(x=>allowedStyles.has(x.split(":")[0].trim().toLowerCase())).join("; ");
-   safe?el.setAttribute("style",safe):el.removeAttribute("style");
+ let x=String(html||"");
+ x=x.replace(/<script[^>]*>[\\w\\W]*?<\\/script>/gi,"").replace(/<style[^>]*>[\\w\\W]*?<\\/style>/gi,"").replace(/javascript:/gi,"");
+ x=x.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
+  const t=String(tag).toLowerCase();
+  if(!allowedTags.has(t))return "";
+  if(m.startsWith("</"))return "</"+t+">";
+  if(t==="br")return "<br>";
+  if(t==="a"){
+   const href=(String(attrs).match(/href\\s*=\\s*["']([^"']+)["']/i)?.[1]||"").replace(/javascript:/gi,"");
+   return /^(https?:|mailto:)/i.test(href)
+    ? '<a href="'+href.replace(/"/g,"&quot;")+'" target="_blank" rel="noopener noreferrer">'
+    : "<a>";
   }
-  if(el.tagName==="A"){
-   const href=el.getAttribute("href")||"";
-   if(!/^(https?:|mailto:)/i.test(href))el.removeAttribute("href");
-   else{el.setAttribute("target","_blank");el.setAttribute("rel","noopener noreferrer");}
+  const styleMatch=String(attrs).match(/style\\s*=\\s*["']([^"']*)["']/i);
+  if(styleMatch){
+   const safe=styleMatch[1].split(";").map((s:string)=>s.trim()).filter(Boolean)
+    .filter((s:string)=>allowedStyles.has(s.split(":")[0].trim().toLowerCase()))
+    .join("; ");
+   return safe ? "<"+t+' style="'+safe.replace(/"/g,"&quot;")+'">' : "<"+t+">";
   }
- };
- Array.from(doc.body.children).forEach(walk);
- return doc.body.innerHTML;
+  return "<"+t+">";
+ });
+ return x;
 }
-
 function visibleText(html:string){
  return String(html||"")
   .replace(/<br\s*\/?>/gi,"\n")
