@@ -85,12 +85,11 @@ Rules:
 SOURCE HTML:
 ${source}`;
 
-  const result=await ai.models.generateContent({
+  const result=await ai.interactions.create({
    model:"gemini-3.8-flash",
-   contents:prompt,
-   config:{temperature:0}
+   input:prompt
   });
-  const candidate=String((result as any).text||"").trim().replace(/^\`\`\`html\s*/i,"").replace(/^\`\`\`\s*/,"").replace(/\s*\`\`\`$/,"").trim();
+  const candidate=String((result as any).output_text||"").trim().replace(/^\`\`\`html\s*/i,"").replace(/^\`\`\`\s*/,"").replace(/\s*\`\`\`$/,"").trim();
   if(!candidate)throw new Error("AI returned no formatted HTML.");
   const output=sanitize(candidate);
   if(normalizedText(output)!==normalizedText(source)){
