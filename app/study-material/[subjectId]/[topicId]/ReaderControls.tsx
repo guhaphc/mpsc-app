@@ -15,104 +15,115 @@ function renderRichText(text:string|undefined, keywords:Keyword[]=[]){
  return parts.map((part,i)=>terms.some(t=>t.toLowerCase()===part.toLowerCase())?<strong key={i}>{part}</strong>:<span key={i}>{part}</span>);
 }
 function renderExplanation(text:string){
- const raw=String(text||"").replace(/\\r/g,"").trim();
- const lines=raw.split(/\\n+/).map(x=>x.trim()).filter(Boolean);
- const labels=["Meaning","Key point","MPSC relevance","Quick revision","Important point","Key points","महत्त्व","मुख्य मुद्दा","MPSC महत्त्व","जलद उजळणी","महत्त्वाचे मुद्दे"];
- const blocks:Array<{type:"heading"|"paragraph"|"bullet";text?:string;items?:string[]}>=[];
- let bullets:string[]=[];
- const flush=()=>{if(bullets.length){blocks.push({type:"bullet",items:[...bullets]});bullets=[];}};
- for(const line of lines){
+ return expandParagraphBlock(text);
+}
+
+function expandParagraphBlock(text:string):Block[]{
+ const raw=String(text||"").replace(/\r/g,"").trim();
+ if(!raw)return [];
+ const blocks:Block[]=[];
+ const lines=raw.split(/\n/);
+ const knownHeadings=[
+  "Meaning","Key point","MPSC relevance","Quick revision","Important point",
+  "Key points","Examples","Example","महत्त्व","मुख्य मुद्दा","MPSC महत्त्व",
+  "जलद उजळणी","महत्त्वाचे मुद्दे"
+ ];
+ let paragraphParts:string[]=[];
+ let bulletItems:string[]=[];
+ let inBullet=false;
+
+ const flushParagraph=()=>{
+  const value=paragraphParts.join(" ").replace(/\s+/g," ").trim();
+  if(value)blocks.push({type:"paragraph",text:value});
+  paragraphParts=[];
+ };
+ const flushBullets=()=>{
+  const items=bulletItems.map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+  if(items.length)blocks.push({type:"bullet",items});
+  bulletItems=[];
+  inBullet=false;
+ };
+ const isKnownHeading=(line:string)=>{
+  const clean=line.replace(/[:：]$/,"").trim();
+  return knownHeadings.find(h=>h.toLowerCase()===clean.toLowerCase());
+ };
+
+ for(const original of lines){
+  const line=original.trim();
+
+  // Blank lines are real paragraph/list boundaries.
   if(!line){
-   flushBullet();
+   if(inBullet)flushBullets();
    flushParagraph();
    continue;
   }
 
-  const heading=isHeading(line);
+  const heading=isKnownHeading(line);
   if(heading){
-   flushBullet();
+   if(inBullet)flushBullets();
    flushParagraph();
-   blocks.push({type:"heading",text:heading});
+   blocks.push({type:"subheading",text:heading});
    continue;
   }
 
-  const headingWithRest=isHeadingWithRest(line);
-  if(headingWithRest){
-   flushBullet();
-   flushParagraph();
-   blocks.push({type:"heading",text:headingWithRest.heading});
-   if(headingWithRest.rest)paragraphParts.push(headingWithRest.rest);
-   continue;
-  }
+  // Detect ALL bullet markers before treating a line as continuation.
+  // This handles: "question? • question? • question?" and
+  // "Examples: •" followed by wrapped bullet text.
+  const markerMatches=[...line.matchAll(/[•▪◦]/g)];
+  if(markerMatches.length){
+   const firstIndex=markerMatches[0].index??0;
+   const prefix=line.slice(0,firstIndex).trim();
 
-  // IMPORTANT: detect every bullet marker BEFORE the "inBullet" continuation
-  // check. A source line may contain several bullets on the same line, and a
-  // marker may appear after wrapped text (e.g. "criminal act? • Should...").
-  const markerPattern=/[•▪◦]/g;
-  const markers=[...line.matchAll(markerPattern)].map(m=>m.index??0);
+   if(inBullet)flushBullets();
+   if(prefix)paragraphParts.push(prefix);
 
-  if(markers.length){
-   const first=markers[0];
-   const prefix=line.slice(0,first).trim();
-
-   if(inBullet){
-    if(prefix)bulletParts.push(prefix);
-    flushBullet();
-   }else if(prefix){
-    pushParagraph(prefix);
+   for(let i=0;i<markerMatches.length;i++){
+    const startIndex=(markerMatches[i].index??0)+1;
+    const endIndex=i+1<markerMatches.length?(markerMatches[i+1].index??line.length):line.length;
+    const item=line.slice(startIndex,endIndex).trim();
+    if(item)bulletItems.push(item);
    }
 
-   for(let n=0;n<markers.length;n++){
-    const from=markers[n]+1;
-    const to=n+1<markers.length?markers[n+1]:line.length;
-    const item=line.slice(from,to).trim();
-    bulletParts=[];
-    inBullet=true;
-    if(item)bulletParts.push(item);
-    if(n<markers.length-1)flushBullet();
-   }
-   continue;
-  }
-
-  // A dash at the start is also a bullet.
-  const dashBullet=line.match(/^[-–—]\\s*(.*)$/);
-  if(dashBullet){
-   flushParagraph();
-   flushBullet();
-   bulletParts=[dashBullet[1].trim()];
+   if(paragraphParts.length)flushParagraph();
    inBullet=true;
    continue;
   }
 
-  // If a wrapped line continues an existing bullet, keep it inside that
-  // bullet. Recognize common prose transitions so the list does not swallow
-  // the paragraph that follows the final bullet.
-  if(inBullet){
-   const transition=/^(These questions|This question|This highlights|These examples|Ethical principles|Overall|In conclusion|Therefore|Thus|Hence|However,|The discussion)/i.test(line);
-   const current=bulletParts.join(" ").trim();
-   if(transition && /[.!?]$/.test(current)){
-    flushBullet();
-    paragraphParts.push(line);
-   }else{
-    bulletParts.push(line);
-   }
+  // Markdown-style bullets.
+  const dash=line.match(/^[-–—]\s+(.+)$/);
+  if(dash){
+   if(inBullet)flushBullets();
+   flushParagraph();
+   bulletItems.push(dash[1].trim());
+   inBullet=true;
    continue;
   }
 
-  // Short labels followed by a colon can be section subheadings.
-  const label=line.match(/^([^:：]{2,42})[:：]\\s*(.+)$/);
-  if(label && (knownHeadings.some(h=>h.toLowerCase()===label[1].trim().toLowerCase()) ||
-      (label[1].trim().length<=28 && !/[.!?]$/.test(label[1].trim())))){
-   flushBullet();
-   flushParagraph();
-   blocks.push({type:"subheading",text:label[1].trim()});
-   paragraphParts.push(label[2].trim());
+  // Continuation of a bullet: join wrapped lines into the same list item.
+  if(inBullet){
+   bulletItems.push(line);
    continue;
+  }
+
+  // "Label: explanation" — render the label separately when it is a
+  // recognised section label, otherwise keep the whole sentence together.
+  const colon=line.match(/^([^:：]{2,35})[:：]\s*(.*)$/);
+  if(colon){
+   const label=colon[1].trim();
+   const rest=colon[2].trim();
+   const known=knownHeadings.find(h=>h.toLowerCase()===label.toLowerCase());
+   if(known){
+    flushParagraph();
+    blocks.push({type:"subheading",text:known});
+    if(rest)paragraphParts.push(rest);
+    continue;
+   }
   }
 
   paragraphParts.push(line);
  }
- flushBullet();
+
+ if(inBullet)flushBullets();
  flushParagraph();
  return blocks;
 }
