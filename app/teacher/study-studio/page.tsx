@@ -51,8 +51,8 @@ export default function StudyStudio(){
   const root=editor.current;if(!root)return;
   const map:Record<string,string>={"1":"12px","2":"14px","3":"16px","4":"18px","5":"20px","6":"24px","7":"28px"};
   root.querySelectorAll("font[size]").forEach(node=>{
-   const el=node as HTMLElement;const size=el.getAttribute("size")||"3";const span=document.createElement("span");
-   span.innerHTML=el.innerHTML;span.style.fontSize=map[size]||"16px";el.replaceWith(span);
+   const el=node as HTMLElement;const size=el.getAttribute("size")||"3";el.style.fontSize=map[size]||"16px";
+   el.removeAttribute("size");
   });
  }
  function selectedFontSize(){
