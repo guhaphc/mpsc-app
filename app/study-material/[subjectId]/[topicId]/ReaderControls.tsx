@@ -190,12 +190,12 @@ export default function ReaderControls({title,notes,contentBlocks,topicId,initia
     <div style={{fontSize:11,fontWeight:850,letterSpacing:".12em",textTransform:"uppercase",opacity:.58,marginBottom:10}}>MPSC STUDY READER</div>
     <h1 style={{fontSize:"clamp(30px,6vw,46px)",lineHeight:1.13,margin:"0 0 30px",letterSpacing:"-.025em"}}>{data.title}</h1>
     <div style={bodyStyle}>{renderBlocks((data as any).content_blocks?.length?(data as any).content_blocks:contentBlocks, data.notes, [])}</div>
-    {data.subtopics?.map((s:Sub,i:number)=><section id={"sub-"+i} key={s.id||i} style={{marginTop:48,paddingTop:34,borderTop:"1px solid var(--line)"}}>
+    {data.subtopics?.map((s:Sub,i:number)=>{const sourceSubtopic=readerSubtopics.find(x=>x.id===s.id);const keywords=sourceSubtopic?.important_keywords||s.important_keywords||[];return <section id={"sub-"+i} key={s.id||i} style={{marginTop:48,paddingTop:34,borderTop:"1px solid var(--line)"}}>
       <h2 style={{fontSize:"clamp(24px,5vw,32px)",lineHeight:1.25,margin:"0 0 20px",fontWeight:850}}>{i+1}. {s.title}</h2>
-      <div style={bodyStyle}>{renderBlocks(marathi?((s as any).content_blocks):s.content_blocks,s.content,s.important_keywords||[])}</div>
+      <div style={bodyStyle}>{renderBlocks((s as any).content_blocks,s.content,keywords)}</div>
       <div style={{marginTop:24,padding:"15px 16px",borderRadius:15,background:theme==="dark"?"#242424":theme==="paper"?"#efe5d2":"rgba(20,70,120,.045)",border:"1px solid var(--line)"}}>
        <div style={{fontSize:12,fontWeight:900,letterSpacing:".04em",marginBottom:10}}>🔑 IMPORTANT MPSC KEYWORDS</div>
-       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{Array.isArray(s.important_keywords)&&s.important_keywords.length?s.important_keywords.map((k:Keyword,j:number)=><button key={k.term+j} className="btn secondary" style={{fontSize:12,fontWeight:750,borderRadius:999,padding:"7px 11px"}} onClick={()=>explainKeyword(k)}>{k.term}</button>):<span className="muted" style={{fontSize:13}}>{keywordLoading?"Preparing…":"No keywords available."}</span>}</div>
+       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{keywords.length?keywords.map((k:Keyword,j:number)=><button key={k.term+j} className="btn secondary" style={{fontSize:12,fontWeight:750,borderRadius:999,padding:"7px 11px"}} onClick={()=>explainKeyword(k)}>{k.term}</button>):<span className="muted" style={{fontSize:13}}>{keywordLoading?"Preparing…":"No keywords available."}</span>}</div>
       </div>
     </section>)}
    </div>
