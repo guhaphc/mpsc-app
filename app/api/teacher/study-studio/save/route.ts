@@ -2,14 +2,19 @@ import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 
 function sanitize(html:string){
- let x=String(html||"").replace(/<script[\\s\\S]*?<\\/script>/gi,"").replace(/<style[\\s\\S]*?<\\/style>/gi,"").replace(/\\son\\w+\\s*=\\s*(['"]).*?\\1/gi,"").replace(/javascript:/gi,"");
+ let x=String(html||"");
+ x=x.replace(/<script[^>]*>[\w\W]*?<\/script>/gi,"").replace(/<style[^>]*>[\w\W]*?<\/style>/gi,"").replace(/javascript:/gi,"");
  const allowed=new Set(["p","br","div","span","h1","h2","h3","h4","strong","b","em","i","u","ul","ol","li","blockquote","a","font"]);
  const safeStyles=new Set(["color","background-color","font-family","font-size","font-weight","font-style","text-decoration","text-align","line-height","margin-top","margin-bottom"]);
- x=x.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
-  const t=tag.toLowerCase();if(!allowed.has(t))return "";
+ x=x.replace(/<\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
+  const t=tag.toLowerCase();
+  if(!allowed.has(t))return "";
   if(m.startsWith("</"))return "</"+t+">";
-  if(t==="a"){const href=(attrs.match(/href\\s*=\\s*["']([^"']+)["']/i)?.[1]||"#").replace(/javascript:/gi,"");return '<a href="'+href+'" target="_blank" rel="noopener noreferrer">';}
-  const styleMatch=attrs.match(/style\\s*=\\s*["']([^"']*)["']/i);
+  if(t==="a"){
+   const href=(attrs.match(/href\s*=\s*["']([^"']+)["']/i)?.[1]||"#").replace(/javascript:/gi,"");
+   return '<a href="'+href+'" target="_blank" rel="noopener noreferrer">';
+  }
+  const styleMatch=attrs.match(/style\s*=\s*["']([^"']*)["']/i);
   if(styleMatch){
    const safe=styleMatch[1].split(";").map((s:string)=>s.trim()).filter(Boolean).filter((s:string)=>safeStyles.has(s.split(":")[0].trim().toLowerCase())).join("; ");
    return safe ? "<"+t+' style="'+safe.replace(/"/g,"&quot;")+'">' : "<"+t+">";
