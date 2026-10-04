@@ -24,7 +24,8 @@ function renderExplanation(text:string){
  for(const line of lines){
   if(/^[-•▪◦]\\s*/.test(line)){bullets.push(line.replace(/^[-•▪◦]\\s*/,"").trim());continue;}
   flush();
-  const exact=labels.find(x=>x.toLowerCase()===line.replace(/[:：]$/,"").toLowerCase());
+  const clean=line.replace(/[:：]$/,"").trim();
+  const exact=labels.find(x=>x.toLowerCase()===clean.toLowerCase());
   if(exact){blocks.push({type:"heading",text:exact});continue;}
   const labelMatch=line.match(/^([^:：]{2,32})[:：]\\s*(.*)$/);
   if(labelMatch && labels.some(x=>x.toLowerCase()===labelMatch[1].trim().toLowerCase())){
@@ -43,11 +44,11 @@ function renderExplanation(text:string){
   blocks.push({type:"paragraph",text:line});
  }
  flush();
- return <div style={{display:"grid",gap:8}}>
+ return <div style={{display:"flex",flexDirection:"column",gap:16}}>
   {blocks.map((b,i)=>{
-   if(b.type==="heading")return <h3 key={i} style={{margin:"18px 0 2px",fontSize:18,fontWeight:900,lineHeight:1.35,letterSpacing:"-.01em"}}>{b.text}</h3>;
-   if(b.type==="bullet")return <ul key={i} style={{margin:"4px 0 10px",paddingLeft:24}}>{(b.items||[]).map((item,j)=><li key={j} style={{marginBottom:10,lineHeight:1.72,paddingLeft:4}}>{item}</li>)}</ul>;
-   return <p key={i} style={{margin:"0 0 7px",lineHeight:1.82,fontSize:16}}>{b.text}</p>;
+   if(b.type==="heading")return <div key={i} style={{marginTop:i===0?0:8,padding:"9px 0 8px 13px",borderLeft:"4px solid var(--accent)",borderBottom:"1px solid var(--line)",fontSize:20,fontWeight:950,lineHeight:1.3,letterSpacing:"-.01em"}}><strong style={{fontWeight:950}}>{b.text}</strong></div>;
+   if(b.type==="bullet")return <ul key={i} style={{margin:"0 0 3px",paddingLeft:27}}>{(b.items||[]).map((item,j)=><li key={j} style={{marginBottom:11,lineHeight:1.72,paddingLeft:5,fontSize:16}}>{item}</li>)}</ul>;
+   return <p key={i} style={{margin:0,lineHeight:1.82,fontSize:16}}>{b.text}</p>;
   })}
  </div>;
 }
