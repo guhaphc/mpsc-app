@@ -136,4 +136,4 @@ export default function StudyStudio(){
     <button type="button" className="btn secondary small" title="Decrease line spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>lineSpacing(-0.15)}>Line −</button><select className="select" style={{width:105}} onChange={e=>setBlockStyle("line-height",e.target.value)} defaultValue=""><option value="" disabled>Line spacing</option><option value="1">1.0</option><option value="1.15">1.15</option><option value="1.3">1.3</option><option value="1.5">1.5</option><option value="1.75">1.75</option><option value="2">2.0</option></select><button type="button" className="btn secondary small" title="Increase line spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>lineSpacing(0.15)}>Line +</button><button type="button" className="btn secondary small" title="Decrease paragraph spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>paragraphSpacing(-4)}>Para −</button><button type="button" className="btn secondary small" title="Increase paragraph spacing" onMouseDown={e=>e.preventDefault()} onClick={()=>paragraphSpacing(4)}>Para +</button>
    </div>
   </div>
- ) : null}}
+  ) : null}
