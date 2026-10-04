@@ -139,15 +139,16 @@ function mergeWrappedListItems(items:string[]):string[]{
  const clean=items.map(x=>String(x||"").replace(/\s+/g," ").trim()).filter(Boolean);
  if(clean.length<2)return clean;
  const out:string[]=[];
+ const continuationWords=new Set(["Ethics","ethics","Law","law","Rights","rights","Studies","studies","Policy","policy"]);
  for(const item of clean){
   const prev=out[out.length-1];
   if(!prev){out.push(item);continue;}
   const prevEndsSentence=/[.!?।॥:]$/.test(prev);
   const startsLower=/^[a-z]/.test(item);
-  // OCR/AI block data sometimes stores one wrapped bullet sentence as several
-  // separate bullet items. Join only clear continuation fragments, while
-  // keeping genuine sentence-level bullets separate.
-  if(!prevEndsSentence && startsLower){
+  // PDF/OCR extraction can split a single wrapped phrase into separate
+  // bullet items, e.g. "Business" + "Ethics" or "Clinical" + "Ethics".
+  // Merge obvious continuation words as well as lowercase continuations.
+  if(!prevEndsSentence && (startsLower || continuationWords.has(item))){
    out[out.length-1]=prev+" "+item;
   }else{
    out.push(item);
