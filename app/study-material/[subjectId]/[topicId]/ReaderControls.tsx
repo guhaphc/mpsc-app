@@ -112,7 +112,6 @@ function renderExplanation(text:string){
 
   paragraphParts.push(line);
  }
- }
  flushBullet();
  flushParagraph();
  return blocks;
