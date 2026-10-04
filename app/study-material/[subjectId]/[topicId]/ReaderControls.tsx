@@ -144,15 +144,20 @@ function expandParagraphBlock(text:string):Block[]{
    continue;
   }
 
-  // Inline bullet runs are converted to a real list while preserving all
-  // wrapped prose before/after them.
-  if(/(?:^|\\s)•\\s*/.test(line)){
-   const parts=line.split(/\\s*•\\s*/).map(x=>x.trim()).filter(Boolean);
-   if(parts.length>1){
-    flushParagraph();
-    pushBullets(parts);
-    continue;
-   }
+  // Bullet markers may appear at the end of a wrapped line
+  // ("Examples: •") with the actual bullet text beginning on the next line.
+  // Treat the marker as a list boundary and keep following wrapped lines
+  // inside that bullet instead of leaving the bullet symbol in prose.
+  const inlineBulletIndex=line.indexOf("•");
+  if(inlineBulletIndex>=0){
+   const before=line.slice(0,inlineBulletIndex).trim();
+   const after=line.slice(inlineBulletIndex+1).trim();
+   flushBullet();
+   if(before)pushParagraph(before);
+   bulletParts=[];
+   inBullet=true;
+   if(after)bulletParts.push(after);
+   continue;
   }
 
   // Short labels followed by a colon can be section subheadings.
