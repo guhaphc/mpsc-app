@@ -48,7 +48,7 @@ function visibleText(html:string){
 
 function normalizedText(html:string){
  return visibleText(html)
-  .replace(/[\\s\\u00a0]+/g," ")
+  .replace(/[\s\u00a0]+/g," ")
   .trim();
 }
 
