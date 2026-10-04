@@ -2,7 +2,7 @@
 import {useEffect,useState} from "react";
 
 type Keyword={term:string;category:string;importance?:string};
-type Block={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table";text?:string;items?:string[];columns?:string[];rows?:string[][]};
+type Block={type:"heading"|"subheading"|"paragraph"|"bullet"|"numbered"|"callout"|"table"|"richtext";text?:string;items?:string[];columns?:string[];rows?:string[][];html?:string};
 type Sub={id:string;title:string;content:string;content_blocks?:Block[];important_keywords?:Keyword[];marathi_content?:string;marathi_content_blocks?:Block[];translation_status?:string};
 
 function renderRichText(text:string|undefined, keywords:Keyword[]=[]){
@@ -176,6 +176,7 @@ function normalizeBlocks(blocks:Block[]|undefined,fallback:string):Block[]{
  return out;
 }
 
+function renderRichHtml(html:string){return <div className="teacherRichText" dangerouslySetInnerHTML={{__html:String(html||"")}} />;}
 function renderBlocks(blocks:Block[]|undefined,fallback:string,keywords:Keyword[]=[]){
  const list=normalizeBlocks(blocks,fallback);
  return list.map((b,i)=>{
@@ -186,6 +187,7 @@ function renderBlocks(blocks:Block[]|undefined,fallback:string,keywords:Keyword[
   if(b.type==="bullet")return <ul key={key} style={{margin:"8px 0 22px",paddingLeft:25,listStylePosition:"outside"}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:12,lineHeight:1.78,paddingLeft:5}}>{renderRichText(x,keywords)}</li>)}</ul>;
   if(b.type==="numbered")return <ol key={key} style={{margin:"8px 0 22px",paddingLeft:28}}>{(b.items||[]).map((x,j)=><li key={j} style={{marginBottom:12,lineHeight:1.78,paddingLeft:5}}>{renderRichText(x,keywords)}</li>)}</ol>;
   if(b.type==="callout")return <aside key={key} style={{margin:"22px 0",padding:"16px 18px",borderLeft:"4px solid var(--accent)",borderRadius:"0 14px 14px 0",background:"var(--soft)",fontWeight:650,lineHeight:1.75}}>{renderRichText(b.text,keywords)}</aside>;
+  if(b.type==="richtext")return <div key={key} style={{lineHeight:1.9}}>{renderRichHtml(b.html||"")}</div>;
   if(b.type==="table")return <div key={key} style={{overflowX:"auto",margin:"22px 0"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}><thead><tr>{(b.columns||[]).map((x,j)=><th key={j} style={{border:"1px solid var(--line)",padding:"10px",textAlign:"left",fontWeight:800}}>{renderRichText(x,keywords)}</th>)}</tr></thead><tbody>{(b.rows||[]).map((row,j)=><tr key={j}>{row.map((x,k)=><td key={k} style={{border:"1px solid var(--line)",padding:"10px",verticalAlign:"top",lineHeight:1.55}}>{renderRichText(x,keywords)}</td>)}</tr>)}</tbody></table></div>;
   return null;
  });
