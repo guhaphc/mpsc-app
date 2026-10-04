@@ -2,11 +2,12 @@ import {redirect} from "next/navigation";
 import {createClient} from "@/lib/supabase/server";
 
 const cards=[
- ["📚","Study Material","Build syllabus-driven AI Study Notes from the approved Micro Syllabus.","/teacher/study-material"],
+ ["📚","Study Material Studio","Upload PDFs, format every heading, paragraph and bullet manually, preview and publish polished notes.","/teacher/study-studio"],
+ ["📚","AI Study Notes","Build syllabus-driven AI Study Notes from the approved Micro Syllabus.","/teacher/study-material"],
  ["📰","Current Affairs","Create and publish exam-focused current affairs.","/teacher/current-affairs"],
  ["📝","Prelims Test Series","Create MCQs, explanations, difficulty and test sets.","/teacher/prelims-tests"],
  ["✍️","Mains Test Series","Create questions, marks, word limits and model-answer points.","/teacher/mains-tests"],
- ["🤖","AI Study Notes","Generate structured study notes from approved source material.","/teacher/ai-study-notes"],
+ ["🤖","AI Subject Builder","Generate structured study notes from approved source material.","/teacher/ai-study-notes"],
  ["📊","Student Performance","Review test and answer-writing performance.","/teacher/student-performance"]
 ];
 
