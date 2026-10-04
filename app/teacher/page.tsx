@@ -7,7 +7,6 @@ const cards=[
  ["📰","Current Affairs","Create and publish exam-focused current affairs.","/teacher/current-affairs"],
  ["📝","Prelims Test Series","Create MCQs, explanations, difficulty and test sets.","/teacher/prelims-tests"],
  ["✍️","Mains Test Series","Create questions, marks, word limits and model-answer points.","/teacher/mains-tests"],
- ["🤖","AI Subject Builder","Generate structured study notes from approved source material.","/teacher/ai-study-notes"],
  ["📊","Student Performance","Review test and answer-writing performance.","/teacher/student-performance"]
 ];
 
