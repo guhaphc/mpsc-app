@@ -1,7 +1,7 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 
-function sanitize(html:string){
+// Preserve safe rich-text formatting and spacing styles.\nfunction sanitize(html:string){
  let x=String(html||"");
  x=x.replace(/<script[^>]*>[\w\W]*?<\/script>/gi,"").replace(/<style[^>]*>[\w\W]*?<\/style>/gi,"").replace(/javascript:/gi,"");
  const allowed=new Set(["p","br","div","span","h1","h2","h3","h4","strong","b","em","i","u","ul","ol","li","blockquote","a","font"]);
