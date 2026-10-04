@@ -135,6 +135,27 @@ function expandParagraphBlock(text:string):Block[]{
  return blocks;
 }
 
+function mergeWrappedListItems(items:string[]):string[]{
+ const clean=items.map(x=>String(x||"").replace(/\s+/g," ").trim()).filter(Boolean);
+ if(clean.length<2)return clean;
+ const out:string[]=[];
+ for(const item of clean){
+  const prev=out[out.length-1];
+  if(!prev){out.push(item);continue;}
+  const prevEndsSentence=/[.!?।॥:]$/.test(prev);
+  const startsLower=/^[a-z]/.test(item);
+  // OCR/AI block data sometimes stores one wrapped bullet sentence as several
+  // separate bullet items. Join only clear continuation fragments, while
+  // keeping genuine sentence-level bullets separate.
+  if(!prevEndsSentence && startsLower){
+   out[out.length-1]=prev+" "+item;
+  }else{
+   out.push(item);
+  }
+ }
+ return out;
+}
+
 function normalizeBlocks(blocks:Block[]|undefined,fallback:string):Block[]{
  const source=Array.isArray(blocks)&&blocks.length?blocks:[{type:"paragraph",text:fallback} as Block];
  const out:Block[]=[];
@@ -146,7 +167,7 @@ function normalizeBlocks(blocks:Block[]|undefined,fallback:string):Block[]{
     const clean=String(item||"").trim();
     return clean.includes("•")?clean.split(/\s*•\s*/).map(x=>x.trim()).filter(Boolean):[clean];
    }).filter(Boolean);
-   out.push({...block,items});
+   out.push({...block,items:block.type==="bullet"?mergeWrappedListItems(items):items});
   }else{
    out.push(block);
   }
