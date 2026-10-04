@@ -10,22 +10,24 @@ const allowedStyles=new Set(["color","background-color","font-family","font-size
 
 function sanitize(html:string){
  let x=String(html||"");
- x=x.replace(/<script[^>]*>[\w\W]*?<\/script>/gi,"").replace(/<style[^>]*>[\w\W]*?<\\/style>/gi,"").replace(/javascript:/gi,"");
+ x=x.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi,"");
+ x=x.replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi,"");
+ x=x.replace(/javascript:/gi,"");
  x=x.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(m,tag,attrs)=>{
   const t=String(tag).toLowerCase();
   if(!allowedTags.has(t))return "";
   if(m.startsWith("</"))return "</"+t+">";
   if(t==="br")return "<br>";
   if(t==="a"){
-   const href=(String(attrs).match(/href\\s*=\\s*["']([^"']+)["']/i)?.[1]||"").replace(/javascript:/gi,"");
+   const href=(String(attrs).match(/href\\s*=\\s*["']([^"']+)["']/i)?.[1]||"");
    return /^(https?:|mailto:)/i.test(href)
     ? '<a href="'+href.replace(/"/g,"&quot;")+'" target="_blank" rel="noopener noreferrer">'
     : "<a>";
   }
   const styleMatch=String(attrs).match(/style\\s*=\\s*["']([^"']*)["']/i);
   if(styleMatch){
-   const safe=styleMatch[1].split(";").map((s:string)=>s.trim()).filter(Boolean)
-    .filter((s:string)=>allowedStyles.has(s.split(":")[0].trim().toLowerCase()))
+   const safe=styleMatch[1].split(";").map((v:string)=>v.trim()).filter(Boolean)
+    .filter((v:string)=>allowedStyles.has(v.split(":")[0].trim().toLowerCase()))
     .join("; ");
    return safe ? "<"+t+' style="'+safe.replace(/"/g,"&quot;")+'">' : "<"+t+">";
   }
