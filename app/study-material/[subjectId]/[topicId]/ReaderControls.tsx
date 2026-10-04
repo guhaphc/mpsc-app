@@ -204,7 +204,7 @@ export default function ReaderControls({title,notes,contentBlocks,topicId,initia
        <div style={{fontSize:12,fontWeight:900,letterSpacing:".04em",marginBottom:10}}>🔑 IMPORTANT MPSC KEYWORDS</div>
        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{keywords.length?keywords.map((k:Keyword,j:number)=><button key={k.term+j} className="btn secondary" style={{fontSize:12,fontWeight:750,borderRadius:999,padding:"7px 11px"}} onClick={()=>explainKeyword(k)}>{k.term}</button>):<span className="muted" style={{fontSize:13}}>{keywordLoading?"Preparing…":"No keywords available."}</span>}</div>
       </div>
-    </section>)}
+    </section>})}
    </div>
   </article>
   <div style={{marginTop:22,padding:18,border:"1px solid var(--line)",borderRadius:18,background:bg,textAlign:"center"}}><div style={{fontWeight:900,fontSize:16}}>{completed?"✅ Notes Completed":"📖 Finished reading?"}</div><p className="muted" style={{margin:"6px 0 12px"}}>{completed?"This chapter is marked as completed.":"Mark this chapter completed after you finish reading it."}</p><button className={completed?"btn secondary":"btn primary"} onClick={markCompleted} disabled={completing}>{completing?"Saving…":completed?"✓ Marked Completed":"✓ MARK AS COMPLETED"}</button></div>
