@@ -74,9 +74,9 @@ function escapeRegExp(s:string){return s.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\f
 
   // Handle source text such as "INTRODUCTION Ethics, often..." where the heading
   // was accidentally merged into the first paragraph.
-  const mergedHeading=knownHeadings.find(h=>new RegExp("^"+escapeRegExp(h)+"(?:\\s+|[:：])","i").test(line));
+  const mergedHeading=knownHeadings.find(h=>line.toLowerCase().startsWith(h.toLowerCase()) && line.length>h.length && /^(?:\\s+|[:：])/.test(line.slice(h.length)));
   if(mergedHeading){
-   const rest=line.replace(new RegExp("^"+escapeRegExp(mergedHeading)+"(?:\\s+|[:：]\\s*)","i"),"").trim();
+   const rest=line.slice(mergedHeading.length).replace(/^\\s+|^[:：]\\s*/,"").trim();
    blocks.push({type:"heading",text:mergedHeading});
    if(rest) {
     if(/(?:^|\s)•\s*/.test(rest))pushBullets(rest); else pushParagraph(rest);
