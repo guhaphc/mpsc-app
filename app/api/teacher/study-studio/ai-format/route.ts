@@ -46,7 +46,11 @@ function visibleText(html:string){
   .replace(/\r/g,"");
 }
 
-function normalizedText(html:string){return visibleText(html).replace(/[ \t]+/g," ").replace(/\n[ \t]+/g,"\n").replace(/[ \t]+\n/g,"\n").trim()}
+function normalizedText(html:string){
+ return visibleText(html)
+  .replace(/[\\s\\u00a0]+/g," ")
+  .trim();
+}
 
 export async function POST(req:Request){
  try{
