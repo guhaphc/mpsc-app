@@ -22,89 +22,6 @@ function renderExplanation(text:string){
  let bullets:string[]=[];
  const flush=()=>{if(bullets.length){blocks.push({type:"bullet",items:[...bullets]});bullets=[];}};
  for(const line of lines){
-  if(/^[-•▪◦]\\s*/.test(line)){bullets.push(line.replace(/^[-•▪◦]\\s*/,"").trim());continue;}
-  flush();
-  const clean=line.replace(/[:：]$/,"").trim();
-  const exact=labels.find(x=>x.toLowerCase()===clean.toLowerCase());
-  if(exact){blocks.push({type:"heading",text:exact});continue;}
-  const labelMatch=line.match(/^([^:：]{2,32})[:：]\\s*(.*)$/);
-  if(labelMatch && labels.some(x=>x.toLowerCase()===labelMatch[1].trim().toLowerCase())){
-   blocks.push({type:"heading",text:labelMatch[1].trim()});
-   if(labelMatch[2].trim())blocks.push({type:"paragraph",text:labelMatch[2].trim()});
-   continue;
-  }
-  if(/(?:^|\\s)•\\s*/.test(line)){
-   const parts=line.split(/\\s*•\\s*/).map(x=>x.trim()).filter(Boolean);
-   if(parts.length>1){
-    if(parts[0])blocks.push({type:"paragraph",text:parts[0]});
-    bullets.push(...parts.slice(1));
-    continue;
-   }
-  }
-  blocks.push({type:"paragraph",text:line});
- }
- flush();
- return <div style={{display:"flex",flexDirection:"column",gap:16}}>
-  {blocks.map((b,i)=>{
-   if(b.type==="heading")return <div key={i} style={{marginTop:i===0?0:8,padding:"9px 0 8px 13px",borderLeft:"4px solid var(--accent)",borderBottom:"1px solid var(--line)",fontSize:20,fontWeight:950,lineHeight:1.3,letterSpacing:"-.01em"}}><strong style={{fontWeight:950}}>{b.text}</strong></div>;
-   if(b.type==="bullet")return <ul key={i} style={{margin:"0 0 3px",paddingLeft:27}}>{(b.items||[]).map((item,j)=><li key={j} style={{marginBottom:11,lineHeight:1.72,paddingLeft:5,fontSize:16}}>{item}</li>)}</ul>;
-   return <p key={i} style={{margin:0,lineHeight:1.82,fontSize:16}}>{b.text}</p>;
-  })}
- </div>;
-}
-
-function expandParagraphBlock(text:string):Block[]{
- const raw=String(text||"").replace(/\\r/g,"").trim();
- if(!raw)return [];
- const knownHeadings=[
-  "INTRODUCTION","BACKGROUND","DEFINITION","MEANING","KEY CONCEPT","KEY CONCEPTS",
-  "ETHICAL INQUIRY","MPSC RELEVANCE","QUICK REVISION","EXAMPLE","EXAMPLES",
-  "CASE STUDY","CONCLUSION","SUMMARY","IMPORTANT POINTS","KEY POINTS",
-  "महत्त्व","मुख्य मुद्दे","मुख्य मुद्दा","जलद उजळणी"
- ];
- const blocks:Block[]=[];
- const pushParagraph=(value:string)=>{
-  const v=value.replace(/\\s+/g," ").trim();
-  if(v)blocks.push({type:"paragraph",text:v});
- };
- const pushBullets=(items:string[])=>{
-  const clean=items.map(x=>x.replace(/\\s+/g," ").trim()).filter(Boolean);
-  if(clean.length)blocks.push({type:"bullet",items:clean});
- };
- const isHeading=(line:string)=>{
-  const clean=line.replace(/[:：]\\s*$/,"").trim();
-  return knownHeadings.find(h=>h.toLowerCase()===clean.toLowerCase());
- };
- const isHeadingWithRest=(line:string)=>{
-  const m=line.match(/^([^:：]{2,42})[:：]\\s*(.*)$/);
-  if(!m)return null;
-  const heading=knownHeadings.find(h=>h.toLowerCase()===m[1].trim().toLowerCase());
-  return heading?{heading,rest:m[2].trim()}:null;
- };
-
- // A single newline is usually a visual wrap from AI/PDF extraction, not a
- // paragraph boundary. Only blank lines create paragraph boundaries. Headings
- // and bullets are still detected line-by-line.
- const lines=raw.split(/\\n/).map(x=>x.trim());
- let paragraphParts:string[]=[];
- let bulletParts:string[]=[];
- let inBullet=false;
-
- const flushBullet=()=>{
-  if(bulletParts.length){
-   pushBullets([bulletParts.join(" ")]);
-   bulletParts=[];
-  }
-  inBullet=false;
- };
- const flushParagraph=()=>{
-  if(paragraphParts.length){
-   pushParagraph(paragraphParts.join(" "));
-   paragraphParts=[];
-  }
- };
-
- for(const line of lines){
   if(!line){
    flushBullet();
    flushParagraph();
@@ -128,35 +45,57 @@ function expandParagraphBlock(text:string):Block[]{
    continue;
   }
 
-  const bulletMatch=line.match(/^[-•▪◦]\\s*(.*)$/);
-  if(bulletMatch){
+  // IMPORTANT: detect every bullet marker BEFORE the "inBullet" continuation
+  // check. A source line may contain several bullets on the same line, and a
+  // marker may appear after wrapped text (e.g. "criminal act? • Should...").
+  const markerPattern=/[•▪◦]/g;
+  const markers=[...line.matchAll(markerPattern)].map(m=>m.index??0);
+
+  if(markers.length){
+   const first=markers[0];
+   const prefix=line.slice(0,first).trim();
+
+   if(inBullet){
+    if(prefix)bulletParts.push(prefix);
+    flushBullet();
+   }else if(prefix){
+    pushParagraph(prefix);
+   }
+
+   for(let n=0;n<markers.length;n++){
+    const from=markers[n]+1;
+    const to=n+1<markers.length?markers[n+1]:line.length;
+    const item=line.slice(from,to).trim();
+    bulletParts=[];
+    inBullet=true;
+    if(item)bulletParts.push(item);
+    if(n<markers.length-1)flushBullet();
+   }
+   continue;
+  }
+
+  // A dash at the start is also a bullet.
+  const dashBullet=line.match(/^[-–—]\\s*(.*)$/);
+  if(dashBullet){
    flushParagraph();
    flushBullet();
-   bulletParts=[bulletMatch[1].trim()];
+   bulletParts=[dashBullet[1].trim()];
    inBullet=true;
    continue;
   }
 
   // If a wrapped line continues an existing bullet, keep it inside that
-  // bullet instead of creating a distorted standalone paragraph.
+  // bullet. Recognize common prose transitions so the list does not swallow
+  // the paragraph that follows the final bullet.
   if(inBullet){
-   bulletParts.push(line);
-   continue;
-  }
-
-  // Bullet markers may appear at the end of a wrapped line
-  // ("Examples: •") with the actual bullet text beginning on the next line.
-  // Treat the marker as a list boundary and keep following wrapped lines
-  // inside that bullet instead of leaving the bullet symbol in prose.
-  const inlineBulletIndex=line.indexOf("•");
-  if(inlineBulletIndex>=0){
-   const before=line.slice(0,inlineBulletIndex).trim();
-   const after=line.slice(inlineBulletIndex+1).trim();
-   flushBullet();
-   if(before)pushParagraph(before);
-   bulletParts=[];
-   inBullet=true;
-   if(after)bulletParts.push(after);
+   const transition=/^(These questions|This question|This highlights|These examples|Ethical principles|Overall|In conclusion|Therefore|Thus|Hence|However,|The discussion)/i.test(line);
+   const current=bulletParts.join(" ").trim();
+   if(transition && /[.!?]$/.test(current)){
+    flushBullet();
+    paragraphParts.push(line);
+   }else{
+    bulletParts.push(line);
+   }
    continue;
   }
 
@@ -172,6 +111,7 @@ function expandParagraphBlock(text:string):Block[]{
   }
 
   paragraphParts.push(line);
+ }
  }
  flushBullet();
  flushParagraph();
